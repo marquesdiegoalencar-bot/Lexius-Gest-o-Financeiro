@@ -1,0 +1,14 @@
+/** Variáveis padrão para e2e (globalSetup + workers Jest). */
+export function applyE2eEnv(): void {
+  process.env.NODE_ENV = 'test';
+  process.env.PORT = process.env.PORT ?? '0';
+  process.env.DATABASE_URL =
+    process.env.E2E_DATABASE_URL ??
+    process.env.DATABASE_URL ??
+    'postgresql://postgres:postgres@127.0.0.1:5432/lexius_financeiro_test';
+  process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'e2e-jwt-secret-minimo-32-caracteres-xx';
+  process.env.COB_INTEGRACAO_API_KEY = process.env.COB_INTEGRACAO_API_KEY ?? 'e2e-cob-api-key';
+  process.env.COB_INTEGRACAO_HMAC_SECRET =
+    process.env.COB_INTEGRACAO_HMAC_SECRET ?? 'e2e-hmac-secret';
+  process.env.COB_EMPRESA_CNPJ = process.env.COB_EMPRESA_CNPJ ?? '00000000000191';
+}

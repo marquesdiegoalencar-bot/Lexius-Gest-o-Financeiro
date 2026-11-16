@@ -7,7 +7,7 @@ Módulo financeiro do grupo Lexius — **projeto independente** do Lexius iA e d
 - Multiempresa, usuários e papéis (`MASTER`, `ADMIN`, `FINANCEIRO`, `OPERADOR`, `CONSULTA`)
 - Plano de contas (categorias globais + por empresa)
 - Pessoas, centros de custo, contas bancárias **somente manuais** (sem Inter/Asaas/C6)
-- Integração COB: `POST /v1/integracao/cobranca/acordos` (idempotente por `codigo`)
+- Integração COB: `POST /v1/integracao/cobranca/acordos` (idempotente por `codigo`; **201** na criação, **200** na repetição)
 
 ## Stack
 
@@ -28,10 +28,12 @@ npm run db:migrate
 npm run db:seed:dev
 ```
 
-4. Suba a API:
+4. Testes e API:
 
 ```bash
 npm install
+npm test
+npm run test:e2e   # Postgres; `scripts/reset-db.js` + seed
 npm run start:dev
 ```
 
