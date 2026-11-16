@@ -4,6 +4,8 @@ export type BancoContext = {
   contaBancariaId: string;
   empresaId: string;
   credencialRef: string | null;
+  /** Número da conta no Inter (header x-conta-corrente quando multi-conta). */
+  contaCorrente?: string | null;
 };
 
 export type SaldoBancoResult = {

@@ -5,6 +5,7 @@ import { PapelUsuario } from '../../database/enums';
 import { CreateTituloReceberDto } from './dto/create-titulo-receber.dto';
 import { FiltroTituloReceberDto } from './dto/filtro-titulo-receber.dto';
 import { ParcelarTituloReceberDto } from './dto/parcelar-titulo-receber.dto';
+import { CobrancasService } from '../cobrancas/cobrancas.service';
 import { TitulosReceberService } from './titulos-receber.service';
 
 type ReqAuth = { empresaId: string; user: { sub: string } };
@@ -12,7 +13,10 @@ type ReqAuth = { empresaId: string; user: { sub: string } };
 @Controller('titulos-receber')
 @UseGuards(PapelGuard)
 export class TitulosReceberController {
-  constructor(private service: TitulosReceberService) {}
+  constructor(
+    private service: TitulosReceberService,
+    private cobrancas: CobrancasService,
+  ) {}
 
   @Get()
   @RequirePapeis(
@@ -64,5 +68,20 @@ export class TitulosReceberController {
   @RequirePapeis(PapelUsuario.MASTER, PapelUsuario.ADMIN, PapelUsuario.FINANCEIRO)
   cancelar(@Param('id') id: string, @Req() req: ReqAuth) {
     return this.service.cancelar(id, req.empresaId, req.user.sub);
+  }
+
+  @Post(':id/emitir-boleto')
+  @RequirePapeis(
+    PapelUsuario.MASTER,
+    PapelUsuario.ADMIN,
+    PapelUsuario.FINANCEIRO,
+    PapelUsuario.OPERADOR,
+  )
+  emitirBoleto(
+    @Param('id') id: string,
+    @Req() req: ReqAuth,
+    @Body() body?: { conta_bancaria_id?: string },
+  ) {
+    return this.cobrancas.emitirBoletoTitulo(id, req.empresaId, body?.conta_bancaria_id);
   }
 }

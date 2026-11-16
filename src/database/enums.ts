@@ -90,3 +90,13 @@ export enum StatusAprovacaoTituloPagar {
   APROVADO = 'APROVADO',
   REJEITADO = 'REJEITADO',
 }
+
+export enum StatusCobranca {
+  EMITIDA = 'EMITIDA',
+  REGISTRADA = 'REGISTRADA',
+  PAGA = 'PAGA',
+  VENCIDA = 'VENCIDA',
+  CANCELADA = 'CANCELADA',
+  EXPIRADA = 'EXPIRADA',
+  ERRO = 'ERRO',
+}

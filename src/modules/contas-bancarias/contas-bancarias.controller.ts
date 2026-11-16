@@ -2,6 +2,8 @@ import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from
 import { RequirePapeis } from '../../common/decorators/papeis.decorator';
 import { PapelGuard } from '../../common/guards/papel.guard';
 import { PapelUsuario } from '../../database/enums';
+import { FormaPagamento } from '../../database/enums';
+import { TarifasCobrancaService } from '../tarifas-cobranca/tarifas-cobranca.service';
 import { ContasBancariasService } from './contas-bancarias.service';
 import { ConsultarExtratoDto } from './dto/consultar-extrato.dto';
 import { CreateContaBancariaDto } from './dto/create-conta-bancaria.dto';
@@ -10,7 +12,10 @@ import { UpdateContaBancariaDto } from './dto/update-conta-bancaria.dto';
 @Controller('contas-bancarias')
 @UseGuards(PapelGuard)
 export class ContasBancariasController {
-  constructor(private service: ContasBancariasService) {}
+  constructor(
+    private service: ContasBancariasService,
+    private tarifas: TarifasCobrancaService,
+  ) {}
 
   @Get()
   @RequirePapeis(
@@ -88,5 +93,29 @@ export class ContasBancariasController {
   @RequirePapeis(PapelUsuario.MASTER, PapelUsuario.ADMIN, PapelUsuario.FINANCEIRO)
   update(@Param('id') id: string, @Req() req: { empresaId: string }, @Body() dto: UpdateContaBancariaDto) {
     return this.service.update(id, req.empresaId, dto);
+  }
+
+  @Post(':id/tarifas-cobranca')
+  @RequirePapeis(PapelUsuario.MASTER, PapelUsuario.ADMIN, PapelUsuario.FINANCEIRO)
+  async definirTarifaCobranca(
+    @Param('id') id: string,
+    @Req() req: { empresaId: string },
+    @Body() body: { forma: FormaPagamento; valor_tarifa: number },
+  ) {
+    await this.service.findOne(id, req.empresaId);
+    return this.tarifas.definirTarifa(id, body.forma, body.valor_tarifa);
+  }
+
+  @Get(':id/tarifas-cobranca')
+  @RequirePapeis(
+    PapelUsuario.MASTER,
+    PapelUsuario.ADMIN,
+    PapelUsuario.FINANCEIRO,
+    PapelUsuario.OPERADOR,
+    PapelUsuario.CONSULTA,
+  )
+  async listarTarifasCobranca(@Param('id') id: string, @Req() req: { empresaId: string }) {
+    await this.service.findOne(id, req.empresaId);
+    return this.tarifas.listarPorConta(id);
   }
 }

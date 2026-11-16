@@ -13,8 +13,10 @@ export function aplicarBaixaReceber(
   },
   valorLiquido: number,
   dataBaixa: string,
+  valorCreditadoTitulo?: number,
 ) {
-  const novoRecebido = roundMoney(fromMoney(titulo.valorRecebido) + valorLiquido);
+  const credito = valorCreditadoTitulo ?? valorLiquido;
+  const novoRecebido = roundMoney(fromMoney(titulo.valorRecebido) + credito);
   titulo.valorRecebido = novoRecebido.toFixed(2);
   const saldo = saldoTituloReceber({ ...titulo, valorRecebido: titulo.valorRecebido });
   if (saldo <= 0.009) {

@@ -7,6 +7,9 @@ import { Baixa } from './entities/baixa.entity';
 import { Categoria } from './entities/categoria.entity';
 import { CentroCusto } from './entities/centro-custo.entity';
 import { CobrancaAcordo } from './entities/cobranca-acordo.entity';
+import { CobrancaBoleto } from './entities/cobranca-boleto.entity';
+import { ContaTarifaCobranca } from './entities/conta-tarifa-cobranca.entity';
+import { WebhookEvento } from './entities/webhook-evento.entity';
 import { ContaBancaria } from './entities/conta-bancaria.entity';
 import { Empresa } from './entities/empresa.entity';
 import { MovimentoBancario } from './entities/movimento-bancario.entity';
@@ -35,6 +38,9 @@ const entities = [
   Anexo,
   Auditoria,
   OperacaoIntergrupo,
+  CobrancaBoleto,
+  WebhookEvento,
+  ContaTarifaCobranca,
 ];
 
 @Module({

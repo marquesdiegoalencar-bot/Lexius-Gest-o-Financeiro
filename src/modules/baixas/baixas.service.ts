@@ -79,8 +79,10 @@ export class BaixasService {
       sentidoPrincipal: SentidoMovimento;
       sentidoTarifa: SentidoMovimento;
       descricaoBase: string;
+      origemMovimento?: OrigemMovimento;
     },
   ): Promise<{ movimentoId: string; movimentoTarifaId: string | null }> {
+    const origem = params.origemMovimento ?? OrigemMovimento.MANUAL;
     const bruto = this.valorBrutoMovimento(params.dto);
     const tarifa = roundMoney(params.dto.tarifa ?? 0);
 
@@ -93,7 +95,7 @@ export class BaixasService {
         valor: toMoneyString(bruto),
         descricao: params.descricaoBase,
         tipoTransacao: 'BAIXA',
-        origem: OrigemMovimento.MANUAL,
+        origem,
         idExterno: `baixa-${params.baixaId}-principal`,
       }),
     );
@@ -109,7 +111,7 @@ export class BaixasService {
           valor: toMoneyString(tarifa),
           descricao: `Tarifa — ${params.descricaoBase}`,
           tipoTransacao: 'TARIFA',
-          origem: OrigemMovimento.MANUAL,
+          origem,
           idExterno: `baixa-${params.baixaId}-tarifa`,
         }),
       );
@@ -148,11 +150,59 @@ export class BaixasService {
     empresaId: string,
     usuarioId: string,
     dto: BaixarTituloDto,
+    opcoes?: {
+      automatica?: boolean;
+      origemEventoId?: string;
+      origemMovimento?: OrigemMovimento;
+    },
   ) {
     const valorLiquido = this.calcValorLiquido(dto);
     await this.validarConta(empresaId, dto.conta_bancaria_id);
 
+    return this.executarBaixaReceber(tituloId, empresaId, usuarioId, dto, valorLiquido, opcoes);
+  }
+
+  /** Baixa automática (webhook/job) reutiliza o mesmo núcleo da baixa manual. */
+  async baixarTituloReceberAutomatico(
+    tituloId: string,
+    empresaId: string,
+    dto: BaixarTituloDto,
+    origemEventoId: string,
+  ) {
+    const valorLiquido = this.calcValorLiquido(dto);
+    const bruto = this.valorBrutoMovimento(dto);
+    return this.executarBaixaReceber(tituloId, empresaId, null, dto, valorLiquido, {
+      automatica: true,
+      origemEventoId,
+      origemMovimento: OrigemMovimento.API_BANCO,
+      valorCreditadoTitulo: bruto,
+    });
+  }
+
+  private async executarBaixaReceber(
+    tituloId: string,
+    empresaId: string,
+    usuarioId: string | null,
+    dto: BaixarTituloDto,
+    valorLiquido: number,
+    opcoes?: {
+      automatica?: boolean;
+      origemEventoId?: string;
+      origemMovimento?: OrigemMovimento;
+      valorCreditadoTitulo?: number;
+    },
+  ) {
     return this.dataSource.transaction(async (manager) => {
+      if (opcoes?.origemEventoId) {
+        const dup = await manager.findOne(Baixa, {
+          where: { origemEventoId: opcoes.origemEventoId, empresaId, estornada: false },
+        });
+        if (dup) {
+          const titulo = await manager.findOne(TituloReceber, { where: { id: tituloId, empresaId } });
+          return { baixa: dup, titulo, movimento: null, idempotente: true };
+        }
+      }
+
       const titulo = await manager.findOne(TituloReceber, {
         where: { id: tituloId, empresaId },
         lock: { mode: 'pessimistic_write' },
@@ -175,6 +225,7 @@ export class BaixasService {
         sentidoPrincipal: SentidoMovimento.CREDITO,
         sentidoTarifa: SentidoMovimento.DEBITO,
         descricaoBase: `Baixa título receber ${titulo.descricao}`,
+        origemMovimento: opcoes?.origemMovimento,
       });
 
       const baixa = await manager.save(
@@ -194,20 +245,22 @@ export class BaixasService {
           valorLiquido: toMoneyString(valorLiquido),
           forma: dto.forma,
           observacao: dto.observacao ?? null,
+          automatica: opcoes?.automatica ?? false,
+          origemEventoId: opcoes?.origemEventoId ?? null,
           criadaPor: usuarioId,
         }),
       );
 
       const antes = { ...titulo };
-      aplicarBaixaReceber(titulo, valorLiquido, dto.data_baixa);
+      aplicarBaixaReceber(titulo, valorLiquido, dto.data_baixa, opcoes?.valorCreditadoTitulo);
       await manager.save(titulo);
 
       await this.auditoria.registrar({
         empresaId,
-        usuarioId,
+        usuarioId: usuarioId ?? undefined,
         entidade: 'baixa',
         entidadeId: baixa.id,
-        acao: 'BAIXAR',
+        acao: opcoes?.automatica ? 'BAIXAR_AUTOMATICA' : 'BAIXAR',
         antes: { titulo_id: titulo.id, status: antes.status, valor_recebido: antes.valorRecebido },
         depois: { status: titulo.status, valor_recebido: titulo.valorRecebido },
       });

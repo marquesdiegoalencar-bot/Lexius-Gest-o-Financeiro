@@ -5,6 +5,7 @@ import { MovimentoBancario } from '../../database/entities/movimento-bancario.en
 import { BancoProviderRegistry } from './banco-provider.registry';
 import { CredenciaisBancoService } from './credenciais-banco.service';
 import { ExtratoSincronizacaoService } from './extrato-sincronizacao.service';
+import { InterCobrancaHttpService } from './inter/inter-cobranca-http.service';
 import { InterHttpService } from './inter/inter-http.service';
 import { AsaasProvider } from './providers/asaas.provider';
 import { C6Provider } from './providers/c6.provider';
@@ -16,6 +17,7 @@ import { ManualProvider } from './providers/manual.provider';
   providers: [
     CredenciaisBancoService,
     InterHttpService,
+    InterCobrancaHttpService,
     ManualProvider,
     InterProvider,
     AsaasProvider,
@@ -27,6 +29,7 @@ import { ManualProvider } from './providers/manual.provider';
     BancoProviderRegistry,
     ExtratoSincronizacaoService,
     CredenciaisBancoService,
+    InterCobrancaHttpService,
   ],
 })
 export class BancoModule {}
