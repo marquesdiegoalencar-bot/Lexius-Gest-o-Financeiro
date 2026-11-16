@@ -1,5 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
@@ -60,6 +62,18 @@ describe('anexos (e2e)', () => {
         contentType: 'application/pdf',
       });
     expect(upload.status).toBe(201);
+    expect(upload.body.anexo.nomeArquivo).toBe('comprovante.pdf');
+    const storageKey = upload.body.anexo.storageChave as string;
+    expect(storageKey).not.toMatch(/comprovante/i);
+    expect(storageKey.startsWith(`${empresaId}/`)).toBe(true);
+    const nomeDisco = storageKey.split('/').pop() ?? '';
+    expect(nomeDisco).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.pdf$/i,
+    );
+    const storageRoot =
+      process.env.STORAGE_LOCAL_PATH ?? path.resolve(process.cwd(), 'storage');
+    await fs.access(path.join(storageRoot, storageKey));
+
     const anexoId = upload.body.anexo.id;
     const dlToken = upload.body.download_token as string;
 
