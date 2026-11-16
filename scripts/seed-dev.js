@@ -2,7 +2,7 @@
 /**
  * Empresa COBRANCA + usuário MASTER para desenvolvimento local.
  */
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const { Client } = require('pg');
 
 async function main() {
