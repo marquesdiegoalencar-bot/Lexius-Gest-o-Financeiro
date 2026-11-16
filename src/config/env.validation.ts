@@ -43,6 +43,18 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   COB_EMPRESA_CNPJ?: string;
+
+  @IsOptional()
+  @IsString()
+  STORAGE_LOCAL_PATH?: string;
+
+  @IsOptional()
+  @IsString()
+  ANEXO_MAX_BYTES?: string;
+
+  @IsOptional()
+  @IsString()
+  ANEXO_MIME_ALLOWED?: string;
 }
 
 export function envValidation(config: Record<string, unknown>) {

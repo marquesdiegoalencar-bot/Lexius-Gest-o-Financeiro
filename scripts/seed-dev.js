@@ -1,9 +1,22 @@
 #!/usr/bin/env node
 /**
- * Empresa COBRANCA + usuário MASTER para desenvolvimento local.
+ * Empresa COBRANCA + usuários MASTER e OPERADOR para desenvolvimento local.
  */
 const bcrypt = require('bcryptjs');
 const { Client } = require('pg');
+
+async function upsertUsuario(client, nome, email, senha) {
+  const hash = await bcrypt.hash(senha, 12);
+  let usuario = await client.query('SELECT id FROM usuarios WHERE email = $1', [email]);
+  if (!usuario.rows.length) {
+    usuario = await client.query(
+      `INSERT INTO usuarios (nome, email, senha_hash) VALUES ($1, $2, $3) RETURNING id`,
+      [nome, email, hash],
+    );
+    console.log('Usuário criado:', email);
+  }
+  return usuario.rows[0].id;
+}
 
 async function main() {
   const url = process.env.DATABASE_URL;
@@ -15,8 +28,10 @@ async function main() {
   await client.connect();
   try {
     const cnpj = process.env.SEED_EMPRESA_CNPJ || '00000000000191';
-    const email = process.env.SEED_MASTER_EMAIL || 'master@lexius.local';
-    const senha = process.env.SEED_MASTER_SENHA || 'Lexius@123';
+    const emailMaster = process.env.SEED_MASTER_EMAIL || 'master@lexius.local';
+    const senhaMaster = process.env.SEED_MASTER_SENHA || 'Lexius@123';
+    const emailOperador = process.env.SEED_OPERADOR_EMAIL || 'operador@lexius.local';
+    const senhaOperador = process.env.SEED_OPERADOR_SENHA || 'Lexius@123';
 
     let empresa = await client.query('SELECT id FROM empresas WHERE cnpj = $1', [cnpj]);
     if (!empresa.rows.length) {
@@ -30,24 +45,24 @@ async function main() {
     }
     const empresaId = empresa.rows[0].id;
 
-    const hash = await bcrypt.hash(senha, 12);
-    let usuario = await client.query('SELECT id FROM usuarios WHERE email = $1', [email]);
-    if (!usuario.rows.length) {
-      usuario = await client.query(
-        `INSERT INTO usuarios (nome, email, senha_hash) VALUES ($1, $2, $3) RETURNING id`,
-        ['Master Dev', email, hash],
-      );
-      console.log('Usuário MASTER criado:', email);
-    }
-    const usuarioId = usuario.rows[0].id;
+    const masterId = await upsertUsuario(client, 'Master Dev', emailMaster, senhaMaster);
+    const operadorId = await upsertUsuario(client, 'Operador Dev', emailOperador, senhaOperador);
 
     await client.query(
       `INSERT INTO usuario_empresa (usuario_id, empresa_id, papel)
        VALUES ($1, $2, 'MASTER')
        ON CONFLICT DO NOTHING`,
-      [usuarioId, empresaId],
+      [masterId, empresaId],
     );
-    console.log('Vínculo MASTER OK. empresa_id=', empresaId);
+
+    await client.query(
+      `INSERT INTO usuario_empresa (usuario_id, empresa_id, papel)
+       VALUES ($1, $2, 'OPERADOR')
+       ON CONFLICT DO NOTHING`,
+      [operadorId, empresaId],
+    );
+
+    console.log('Vínculos OK. empresa_id=', empresaId);
   } finally {
     await client.end();
   }

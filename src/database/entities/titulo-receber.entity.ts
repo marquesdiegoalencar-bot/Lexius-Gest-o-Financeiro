@@ -59,6 +59,9 @@ export class TituloReceber {
   @Column({ name: 'parcela_total', type: 'smallint', default: 1 })
   parcelaTotal!: number;
 
+  @Column({ name: 'grupo_parcelas_id', type: 'uuid', nullable: true })
+  grupoParcelasId!: string | null;
+
   @Column({ name: 'valor_original', type: 'numeric', precision: 14, scale: 2 })
   valorOriginal!: string;
 

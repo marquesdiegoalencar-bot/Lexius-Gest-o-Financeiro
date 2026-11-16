@@ -261,6 +261,11 @@ CREATE TABLE titulos_pagar (
     chave_pix      TEXT,
     observacao     TEXT,
     numero_nf      TEXT,                                  -- referência da NF emitida fora do sistema (só informativo)
+    status_aprovacao TEXT NOT NULL DEFAULT 'PENDENTE'
+        CHECK (status_aprovacao IN ('PENDENTE','APROVADO','REJEITADO')),
+    aprovado_por   UUID REFERENCES usuarios(id),
+    aprovado_em    TIMESTAMPTZ,
+    rejeitado_motivo TEXT,
     criado_por     UUID REFERENCES usuarios(id),
     criado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
     atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -339,6 +344,7 @@ CREATE TABLE baixas (
     titulo_pagar_id   UUID REFERENCES titulos_pagar(id),
     conta_bancaria_id UUID NOT NULL REFERENCES contas_bancarias(id),
     movimento_id  UUID REFERENCES movimentos_bancarios(id),
+    movimento_tarifa_id UUID REFERENCES movimentos_bancarios(id),
     data_baixa    DATE NOT NULL,
     valor_principal NUMERIC(14,2) NOT NULL CHECK (valor_principal >= 0),
     juros         NUMERIC(14,2) NOT NULL DEFAULT 0,

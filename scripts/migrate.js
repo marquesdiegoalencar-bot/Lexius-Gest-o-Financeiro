@@ -16,9 +16,22 @@ async function main() {
   const sql = fs.readFileSync(sqlPath, 'utf8');
   const client = new Client({ connectionString: url });
   await client.connect();
+  const migrationsDir = path.join(__dirname, '..', 'migrations');
+  const migrationFiles = fs.existsSync(migrationsDir)
+    ? fs
+        .readdirSync(migrationsDir)
+        .filter((f) => f.endsWith('.sql'))
+        .sort()
+    : [];
+
   try {
     await client.query(sql);
     console.log('schema.sql aplicado com sucesso');
+    for (const file of migrationFiles) {
+      const migSql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+      await client.query(migSql);
+      console.log(`migration aplicada: ${file}`);
+    }
   } finally {
     await client.end();
   }

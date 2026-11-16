@@ -11,4 +11,10 @@ export function applyE2eEnv(): void {
   process.env.COB_INTEGRACAO_HMAC_SECRET =
     process.env.COB_INTEGRACAO_HMAC_SECRET ?? 'e2e-hmac-secret';
   process.env.COB_EMPRESA_CNPJ = process.env.COB_EMPRESA_CNPJ ?? '00000000000191';
+  process.env.STORAGE_LOCAL_PATH =
+    process.env.STORAGE_LOCAL_PATH ?? '/tmp/lexius-e2e-storage';
+  process.env.ANEXO_MAX_BYTES = process.env.ANEXO_MAX_BYTES ?? '10485760';
+  process.env.ANEXO_MIME_ALLOWED =
+    process.env.ANEXO_MIME_ALLOWED ??
+    'application/pdf,image/png,image/jpeg,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 }
