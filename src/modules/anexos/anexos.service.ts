@@ -64,7 +64,7 @@ export class AnexosService {
 
     let conteudo: { mime: string; extensao: string };
     try {
-      conteudo = await detectarConteudoAnexo(file.buffer, this.allowedMime);
+      conteudo = detectarConteudoAnexo(file.buffer, this.allowedMime);
     } catch (err) {
       const code = err instanceof Error ? err.message : '';
       if (code === 'UNRECOGNIZED') {
