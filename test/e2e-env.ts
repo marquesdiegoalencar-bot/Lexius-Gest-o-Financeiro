@@ -17,4 +17,6 @@ export function applyE2eEnv(): void {
   process.env.ANEXO_MIME_ALLOWED =
     process.env.ANEXO_MIME_ALLOWED ??
     'application/pdf,image/png,image/jpeg,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  process.env.INTER_USE_MOCK = process.env.INTER_USE_MOCK ?? 'true';
+  process.env.INTER_SANDBOX = process.env.INTER_SANDBOX ?? 'true';
 }
