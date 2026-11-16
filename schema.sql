@@ -261,6 +261,11 @@ CREATE TABLE titulos_pagar (
     chave_pix      TEXT,
     observacao     TEXT,
     numero_nf      TEXT,                                  -- referência da NF emitida fora do sistema (só informativo)
+    status_aprovacao TEXT NOT NULL DEFAULT 'PENDENTE'
+        CHECK (status_aprovacao IN ('PENDENTE','APROVADO','REJEITADO')),
+    aprovado_por   UUID REFERENCES usuarios(id),
+    aprovado_em    TIMESTAMPTZ,
+    rejeitado_motivo TEXT,
     criado_por     UUID REFERENCES usuarios(id),
     criado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
     atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()

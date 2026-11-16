@@ -1,12 +1,19 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { CobrancaAcordo } from './entities/cobranca-acordo.entity';
+import { Anexo } from './entities/anexo.entity';
+import { Auditoria } from './entities/auditoria.entity';
+import { Baixa } from './entities/baixa.entity';
 import { Categoria } from './entities/categoria.entity';
 import { CentroCusto } from './entities/centro-custo.entity';
+import { CobrancaAcordo } from './entities/cobranca-acordo.entity';
 import { ContaBancaria } from './entities/conta-bancaria.entity';
 import { Empresa } from './entities/empresa.entity';
+import { MovimentoBancario } from './entities/movimento-bancario.entity';
+import { OperacaoIntergrupo } from './entities/operacao-intergrupo.entity';
 import { Pessoa } from './entities/pessoa.entity';
+import { Recorrencia } from './entities/recorrencia.entity';
+import { TituloPagar } from './entities/titulo-pagar.entity';
 import { TituloReceber } from './entities/titulo-receber.entity';
 import { UsuarioEmpresa } from './entities/usuario-empresa.entity';
 import { Usuario } from './entities/usuario.entity';
@@ -21,6 +28,13 @@ const entities = [
   ContaBancaria,
   CobrancaAcordo,
   TituloReceber,
+  TituloPagar,
+  Baixa,
+  MovimentoBancario,
+  Recorrencia,
+  Anexo,
+  Auditoria,
+  OperacaoIntergrupo,
 ];
 
 @Module({

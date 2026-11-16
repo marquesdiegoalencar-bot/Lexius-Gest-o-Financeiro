@@ -69,3 +69,24 @@ export enum StatusTitulo {
   CANCELADO = 'CANCELADO',
   RENEGOCIADO = 'RENEGOCIADO',
 }
+
+export enum SentidoMovimento {
+  CREDITO = 'CREDITO',
+  DEBITO = 'DEBITO',
+}
+
+export enum OrigemMovimento {
+  API_BANCO = 'API_BANCO',
+  OFX = 'OFX',
+  MANUAL = 'MANUAL',
+  BAIXA = 'BAIXA',
+  TRANSFERENCIA = 'TRANSFERENCIA',
+  REPASSE = 'REPASSE',
+  AJUSTE = 'AJUSTE',
+}
+
+export enum StatusAprovacaoTituloPagar {
+  PENDENTE = 'PENDENTE',
+  APROVADO = 'APROVADO',
+  REJEITADO = 'REJEITADO',
+}

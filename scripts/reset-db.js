@@ -17,9 +17,21 @@ async function main() {
   const client = new Client({ connectionString: url });
   await client.connect();
   try {
+    const migrationsDir = path.join(__dirname, '..', 'migrations');
+    const migrationFiles = fs.existsSync(migrationsDir)
+      ? fs
+          .readdirSync(migrationsDir)
+          .filter((f) => f.endsWith('.sql'))
+          .sort()
+      : [];
+
     await client.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
     await client.query(sql);
-    console.log('Banco resetado e schema.sql aplicado');
+    for (const file of migrationFiles) {
+      const migSql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+      await client.query(migSql);
+    }
+    console.log('Banco resetado, schema.sql e migrations aplicados');
   } finally {
     await client.end();
   }
