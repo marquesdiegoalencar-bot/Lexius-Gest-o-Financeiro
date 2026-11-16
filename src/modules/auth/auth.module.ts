@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -12,6 +12,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 
+@Global()
 @Module({
   imports: [
     TypeOrmModule.forFeature([Usuario, UsuarioEmpresa]),
@@ -32,6 +33,6 @@ import { JwtStrategy } from './jwt.strategy';
     PapelGuard,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
-  exports: [AuthService, PapelGuard, JwtModule],
+  exports: [AuthService, PapelGuard, JwtModule, TypeOrmModule],
 })
 export class AuthModule {}
