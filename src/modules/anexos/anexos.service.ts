@@ -11,6 +11,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomUUID } from 'crypto';
 import * as path from 'path';
 import { Repository } from 'typeorm';
+import {
+  ANEXO_MIMES_PADRAO,
+  detectarConteudoAnexo,
+} from '../../common/files/detectar-conteudo-anexo';
 import { STORAGE_PROVIDER, StorageProvider } from '../../common/storage/storage-provider.interface';
 import { Anexo } from '../../database/entities/anexo.entity';
 
@@ -34,7 +38,8 @@ export class AnexosService {
     @InjectRepository(Anexo) private repo: Repository<Anexo>,
   ) {
     this.maxBytes = Number(this.config.get<string>('ANEXO_MAX_BYTES') ?? 10 * 1024 * 1024);
-    const raw = this.config.get<string>('ANEXO_MIME_ALLOWED') ?? 'application/pdf,image/png,image/jpeg';
+    const raw =
+      this.config.get<string>('ANEXO_MIME_ALLOWED') ?? ANEXO_MIMES_PADRAO.join(',');
     this.allowedMime = new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
   }
 
@@ -54,19 +59,28 @@ export class AnexosService {
     if (file.size > this.maxBytes) {
       throw new BadRequestException('Arquivo excede tamanho máximo');
     }
-    if (!this.allowedMime.has(file.mimetype)) {
-      throw new BadRequestException('Tipo MIME não permitido');
-    }
 
     const nomeArquivo = this.validarNomeArquivo(file.originalname);
 
+    let conteudo: { mime: string; extensao: string };
+    try {
+      conteudo = await detectarConteudoAnexo(file.buffer, this.allowedMime);
+    } catch (err) {
+      const code = err instanceof Error ? err.message : '';
+      if (code === 'UNRECOGNIZED') {
+        throw new BadRequestException('Conteúdo do arquivo não reconhecido');
+      }
+      throw new BadRequestException('Tipo de arquivo não permitido');
+    }
+
     const hash = createHash('sha256').update(file.buffer).digest('hex');
-    const ext = path.extname(nomeArquivo) || '';
-    const storageKey = path.join(empresaId, `${randomUUID()}${ext}`).replace(/\\/g, '/');
+    const storageKey = path
+      .join(empresaId, `${randomUUID()}${conteudo.extensao}`)
+      .replace(/\\/g, '/');
     await this.storage.save({
       relativeKey: storageKey,
       buffer: file.buffer,
-      mimeType: file.mimetype,
+      mimeType: conteudo.mime,
     });
 
     const anexo = await this.repo.save(
@@ -75,7 +89,7 @@ export class AnexosService {
         entidade,
         entidadeId,
         nomeArquivo,
-        mimeType: file.mimetype,
+        mimeType: conteudo.mime,
         tamanhoBytes: String(file.size),
         hashSha256: hash,
         storageChave: storageKey,
@@ -120,9 +134,10 @@ export class AnexosService {
     if (!anexo) throw new NotFoundException('Anexo não encontrado');
 
     const buffer = await this.storage.read(anexo.storageChave);
+    const safeName = anexo.nomeArquivo.replace(/[\r\n"\\]/g, '_');
     return new StreamableFile(buffer, {
       type: anexo.mimeType,
-      disposition: `attachment; filename="${anexo.nomeArquivo}"`,
+      disposition: `attachment; filename="${safeName}"`,
     });
   }
 }

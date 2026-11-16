@@ -15,5 +15,6 @@ export function applyE2eEnv(): void {
     process.env.STORAGE_LOCAL_PATH ?? '/tmp/lexius-e2e-storage';
   process.env.ANEXO_MAX_BYTES = process.env.ANEXO_MAX_BYTES ?? '10485760';
   process.env.ANEXO_MIME_ALLOWED =
-    process.env.ANEXO_MIME_ALLOWED ?? 'application/pdf,image/png,image/jpeg';
+    process.env.ANEXO_MIME_ALLOWED ??
+    'application/pdf,image/png,image/jpeg,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 }

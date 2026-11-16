@@ -13,6 +13,17 @@ import {
   login,
 } from './e2e-auth.helpers';
 
+/** PDF mínimo reconhecido por magic bytes (não depende do Content-Type do cliente). */
+const PDF_MINIMO = Buffer.from(
+  '%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF',
+);
+
+/** PNG 1×1 px */
+const PNG_MINIMO = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
+
 describe('anexos (e2e)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
@@ -57,12 +68,13 @@ describe('anexos (e2e)', () => {
       .post('/v1/anexos')
       .query({ entidade: 'titulo_receber', entidade_id: tituloId })
       .set(authHeaders(token, empresaId))
-      .attach('file', Buffer.from('%PDF-1.4 test'), {
+      .attach('file', PDF_MINIMO, {
         filename: 'comprovante.pdf',
         contentType: 'application/pdf',
       });
     expect(upload.status).toBe(201);
     expect(upload.body.anexo.nomeArquivo).toBe('comprovante.pdf');
+    expect(upload.body.anexo.mimeType).toBe('application/pdf');
     const storageKey = upload.body.anexo.storageChave as string;
     expect(storageKey).not.toMatch(/comprovante/i);
     expect(storageKey.startsWith(`${empresaId}/`)).toBe(true);
@@ -83,17 +95,50 @@ describe('anexos (e2e)', () => {
       .set(authHeaders(token, empresaId));
     expect(download.status).toBe(200);
     expect(download.headers['content-type']).toMatch(/pdf/);
+    expect(download.headers['content-disposition']).toMatch(/^attachment;/i);
+    expect(download.headers['x-content-type-options']).toBe('nosniff');
   });
 
-  it('rejeita mime não permitido', async () => {
+  it('aceita PDF com Content-Type e extensão enganosos quando o conteúdo é válido', async () => {
     const upload = await request(app.getHttpServer())
       .post('/v1/anexos')
       .query({ entidade: 'titulo_receber', entidade_id: tituloId })
       .set(authHeaders(token, empresaId))
-      .attach('file', Buffer.from('not allowed'), {
-        filename: 'x.exe',
+      .attach('file', PDF_MINIMO, {
+        filename: 'virus.exe',
         contentType: 'application/octet-stream',
       });
+    expect(upload.status).toBe(201);
+    expect(upload.body.anexo.mimeType).toBe('application/pdf');
+    const nomeDisco = (upload.body.anexo.storageChave as string).split('/').pop() ?? '';
+    expect(nomeDisco).toMatch(/\.pdf$/i);
+    expect(nomeDisco).not.toMatch(/\.exe$/i);
+  });
+
+  it('usa extensão do conteúdo detectado (PNG com nome .pdf no cliente)', async () => {
+    const upload = await request(app.getHttpServer())
+      .post('/v1/anexos')
+      .query({ entidade: 'titulo_receber', entidade_id: tituloId })
+      .set(authHeaders(token, empresaId))
+      .attach('file', PNG_MINIMO, {
+        filename: 'foto.pdf',
+        contentType: 'application/pdf',
+      });
+    expect(upload.status).toBe(201);
+    expect(upload.body.anexo.mimeType).toBe('image/png');
+    expect((upload.body.anexo.storageChave as string).endsWith('.png')).toBe(true);
+  });
+
+  it('rejeita conteúdo não permitido mesmo com Content-Type de PDF', async () => {
+    const upload = await request(app.getHttpServer())
+      .post('/v1/anexos')
+      .query({ entidade: 'titulo_receber', entidade_id: tituloId })
+      .set(authHeaders(token, empresaId))
+      .attach('file', Buffer.from('not allowed plain text'), {
+        filename: 'doc.pdf',
+        contentType: 'application/pdf',
+      });
     expect(upload.status).toBe(400);
+    expect(upload.body.message).toMatch(/não reconhecido|não permitido/i);
   });
 });

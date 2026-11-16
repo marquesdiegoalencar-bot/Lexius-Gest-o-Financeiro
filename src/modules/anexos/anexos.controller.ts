@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Controller,
   Get,
+  Header,
   Param,
   Post,
   Query,
@@ -54,6 +55,7 @@ export class AnexosController {
   }
 
   @Get(':id/download')
+  @Header('X-Content-Type-Options', 'nosniff')
   @RequirePapeis(
     PapelUsuario.MASTER,
     PapelUsuario.ADMIN,
