@@ -7,6 +7,7 @@ import { DatabaseModule } from './database/database.module';
 import { AnexosModule } from './modules/anexos/anexos.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BaixasModule } from './modules/baixas/baixas.module';
+import { CobrancasModule } from './modules/cobrancas/cobrancas.module';
 import { CategoriasModule } from './modules/categorias/categorias.module';
 import { CentrosCustoModule } from './modules/centros-custo/centros-custo.module';
 import { ContasBancariasModule } from './modules/contas-bancarias/contas-bancarias.module';
@@ -37,6 +38,7 @@ import { UsuariosModule } from './modules/usuarios/usuarios.module';
     CentrosCustoModule,
     ContasBancariasModule,
     IntegracaoCobrancaModule,
+    CobrancasModule,
     TitulosReceberModule,
     TitulosPagarModule,
     BaixasModule,

@@ -55,6 +55,14 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   ANEXO_MIME_ALLOWED?: string;
+
+  @IsOptional()
+  @IsBooleanString()
+  INTER_USE_MOCK?: string;
+
+  @IsOptional()
+  @IsString()
+  WEBHOOK_INTER_MOCK_SECRET?: string;
 }
 
 export function envValidation(config: Record<string, unknown>) {
@@ -67,5 +75,16 @@ export function envValidation(config: Record<string, unknown>) {
       `Configuração inválida: ${errors.map((e) => Object.values(e.constraints ?? {}).join(', ')).join('; ')}`,
     );
   }
+
+  const nodeEnv = String(config.NODE_ENV ?? 'development').toLowerCase();
+  if (nodeEnv === 'production') {
+    if (config.INTER_USE_MOCK === 'true') {
+      throw new Error('INTER_USE_MOCK não pode ser true em NODE_ENV=production');
+    }
+    if (config.WEBHOOK_INTER_MOCK_SECRET) {
+      throw new Error('WEBHOOK_INTER_MOCK_SECRET não pode ser definido em production');
+    }
+  }
+
   return validated;
 }

@@ -394,6 +394,15 @@ CREATE TABLE cobrancas_boleto (
 );
 CREATE INDEX idx_cb_titulo ON cobrancas_boleto(titulo_receber_id);
 
+-- Tarifa de cobrança por conta e forma (boleto / Pix)
+CREATE TABLE conta_tarifas_cobranca (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conta_bancaria_id UUID NOT NULL REFERENCES contas_bancarias(id) ON DELETE CASCADE,
+    forma             forma_pagamento NOT NULL,
+    valor_tarifa      NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (valor_tarifa >= 0),
+    UNIQUE (conta_bancaria_id, forma)
+);
+
 -- Eventos recebidos de webhook (idempotência + auditoria + reprocessamento)
 CREATE TABLE webhook_eventos (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -406,6 +415,7 @@ CREATE TABLE webhook_eventos (
     processado_em TIMESTAMPTZ,
     tentativas    SMALLINT NOT NULL DEFAULT 0,
     erro          TEXT,
+    revisao_manual BOOLEAN NOT NULL DEFAULT FALSE,
     recebido_em   TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (provedor, evento_id_externo)
 );
