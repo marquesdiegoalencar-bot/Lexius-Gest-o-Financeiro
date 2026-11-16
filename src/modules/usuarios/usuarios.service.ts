@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { Repository } from 'typeorm';
 import { UsuarioEmpresa } from '../../database/entities/usuario-empresa.entity';
 import { Usuario } from '../../database/entities/usuario.entity';
