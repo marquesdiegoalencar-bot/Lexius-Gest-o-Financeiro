@@ -58,8 +58,10 @@ export class AnexosService {
       throw new BadRequestException('Tipo MIME não permitido');
     }
 
+    const nomeArquivo = this.validarNomeArquivo(file.originalname);
+
     const hash = createHash('sha256').update(file.buffer).digest('hex');
-    const ext = path.extname(file.originalname) || '';
+    const ext = path.extname(nomeArquivo) || '';
     const storageKey = path.join(empresaId, `${randomUUID()}${ext}`).replace(/\\/g, '/');
     await this.storage.save({
       relativeKey: storageKey,
@@ -72,7 +74,7 @@ export class AnexosService {
         empresaId,
         entidade,
         entidadeId,
-        nomeArquivo: file.originalname,
+        nomeArquivo,
         mimeType: file.mimetype,
         tamanhoBytes: String(file.size),
         hashSha256: hash,
@@ -87,6 +89,20 @@ export class AnexosService {
     );
 
     return { anexo, download_token: token };
+  }
+
+  private validarNomeArquivo(originalname: string): string {
+    if (!originalname?.trim()) {
+      throw new BadRequestException('Nome de arquivo inválido');
+    }
+    if (originalname.includes('..') || originalname.includes('/') || originalname.includes('\\')) {
+      throw new BadRequestException('Nome de arquivo inválido');
+    }
+    const base = path.basename(originalname);
+    if (base !== originalname || base === '.' || base === '..') {
+      throw new BadRequestException('Nome de arquivo inválido');
+    }
+    return base;
   }
 
   async download(anexoId: string, token: string) {

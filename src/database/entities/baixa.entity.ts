@@ -21,6 +21,9 @@ export class Baixa {
   @Column({ name: 'movimento_id', type: 'uuid', nullable: true })
   movimentoId!: string | null;
 
+  @Column({ name: 'movimento_tarifa_id', type: 'uuid', nullable: true })
+  movimentoTarifaId!: string | null;
+
   @Column({ name: 'data_baixa', type: 'date' })
   dataBaixa!: string;
 

@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { AuditoriaService } from '../../common/auditoria/auditoria.service';
 import {
@@ -54,10 +54,93 @@ export class BaixasService {
     return roundMoney(liquido);
   }
 
+  private valorBrutoMovimento(dto: BaixarTituloDto): number {
+    const bruto =
+      dto.valor_principal + (dto.juros ?? 0) + (dto.multa ?? 0) - (dto.desconto ?? 0);
+    if (bruto <= 0) {
+      throw new BadRequestException('Valor bruto da baixa deve ser positivo');
+    }
+    return roundMoney(bruto);
+  }
+
   private async validarConta(empresaId: string, contaId: string) {
     const conta = await this.contas.findOne({ where: { id: contaId, empresaId, ativa: true } });
     if (!conta) throw new NotFoundException('Conta bancária não encontrada');
     return conta;
+  }
+
+  private async criarMovimentosBaixa(
+    manager: EntityManager,
+    params: {
+      baixaId: string;
+      contaBancariaId: string;
+      dataBaixa: string;
+      dto: BaixarTituloDto;
+      sentidoPrincipal: SentidoMovimento;
+      sentidoTarifa: SentidoMovimento;
+      descricaoBase: string;
+    },
+  ): Promise<{ movimentoId: string; movimentoTarifaId: string | null }> {
+    const bruto = this.valorBrutoMovimento(params.dto);
+    const tarifa = roundMoney(params.dto.tarifa ?? 0);
+
+    const principal = await manager.save(
+      manager.create(MovimentoBancario, {
+        contaBancariaId: params.contaBancariaId,
+        dataMovimento: params.dataBaixa,
+        dataHora: new Date(),
+        sentido: params.sentidoPrincipal,
+        valor: toMoneyString(bruto),
+        descricao: params.descricaoBase,
+        tipoTransacao: 'BAIXA',
+        origem: OrigemMovimento.MANUAL,
+        idExterno: `baixa-${params.baixaId}-principal`,
+      }),
+    );
+
+    let movimentoTarifaId: string | null = null;
+    if (tarifa > 0) {
+      const movTarifa = await manager.save(
+        manager.create(MovimentoBancario, {
+          contaBancariaId: params.contaBancariaId,
+          dataMovimento: params.dataBaixa,
+          dataHora: new Date(),
+          sentido: params.sentidoTarifa,
+          valor: toMoneyString(tarifa),
+          descricao: `Tarifa — ${params.descricaoBase}`,
+          tipoTransacao: 'TARIFA',
+          origem: OrigemMovimento.MANUAL,
+          idExterno: `baixa-${params.baixaId}-tarifa`,
+        }),
+      );
+      movimentoTarifaId = movTarifa.id;
+    }
+
+    return { movimentoId: principal.id, movimentoTarifaId };
+  }
+
+  private async estornarMovimentosBaixa(manager: EntityManager, baixa: Baixa) {
+    const ids = [baixa.movimentoId, baixa.movimentoTarifaId].filter(Boolean) as string[];
+    for (const movId of ids) {
+      const mov = await manager.findOne(MovimentoBancario, { where: { id: movId } });
+      if (!mov) continue;
+      await manager.save(
+        manager.create(MovimentoBancario, {
+          contaBancariaId: mov.contaBancariaId,
+          dataMovimento: new Date().toISOString().slice(0, 10),
+          dataHora: new Date(),
+          sentido:
+            mov.sentido === SentidoMovimento.CREDITO
+              ? SentidoMovimento.DEBITO
+              : SentidoMovimento.CREDITO,
+          valor: mov.valor,
+          descricao: `Estorno ${mov.tipoTransacao ?? 'movimento'} baixa ${baixa.id}`,
+          tipoTransacao: mov.tipoTransacao ? `ESTORNO_${mov.tipoTransacao}` : 'ESTORNO',
+          origem: OrigemMovimento.MANUAL,
+          idExterno: `estorno-${baixa.id}-${mov.id}-${uuidv4()}`,
+        }),
+      );
+    }
   }
 
   async baixarTituloReceber(
@@ -83,25 +166,25 @@ export class BaixasService {
         throw new BadRequestException('Valor da baixa excede saldo em aberto');
       }
 
-      const movimento = await manager.save(
-        manager.create(MovimentoBancario, {
-          contaBancariaId: dto.conta_bancaria_id,
-          dataMovimento: dto.data_baixa,
-          dataHora: new Date(),
-          sentido: SentidoMovimento.CREDITO,
-          valor: toMoneyString(valorLiquido),
-          descricao: `Baixa título receber ${titulo.descricao}`,
-          origem: OrigemMovimento.MANUAL,
-          idExterno: `baixa-tr-${uuidv4()}`,
-        }),
-      );
+      const baixaId = uuidv4();
+      const { movimentoId, movimentoTarifaId } = await this.criarMovimentosBaixa(manager, {
+        baixaId,
+        contaBancariaId: dto.conta_bancaria_id,
+        dataBaixa: dto.data_baixa,
+        dto,
+        sentidoPrincipal: SentidoMovimento.CREDITO,
+        sentidoTarifa: SentidoMovimento.DEBITO,
+        descricaoBase: `Baixa título receber ${titulo.descricao}`,
+      });
 
       const baixa = await manager.save(
         manager.create(Baixa, {
+          id: baixaId,
           empresaId,
           tituloReceberId: titulo.id,
           contaBancariaId: dto.conta_bancaria_id,
-          movimentoId: movimento.id,
+          movimentoId,
+          movimentoTarifaId,
           dataBaixa: dto.data_baixa,
           valorPrincipal: toMoneyString(dto.valor_principal),
           juros: toMoneyString(dto.juros ?? 0),
@@ -129,6 +212,7 @@ export class BaixasService {
         depois: { status: titulo.status, valor_recebido: titulo.valorRecebido },
       });
 
+      const movimento = await manager.findOne(MovimentoBancario, { where: { id: movimentoId } });
       return { baixa, titulo, movimento };
     });
   }
@@ -163,25 +247,25 @@ export class BaixasService {
         throw new BadRequestException('Valor da baixa excede saldo em aberto');
       }
 
-      const movimento = await manager.save(
-        manager.create(MovimentoBancario, {
-          contaBancariaId: dto.conta_bancaria_id,
-          dataMovimento: dto.data_baixa,
-          dataHora: new Date(),
-          sentido: SentidoMovimento.DEBITO,
-          valor: toMoneyString(valorLiquido),
-          descricao: `Baixa título pagar ${titulo.descricao}`,
-          origem: OrigemMovimento.MANUAL,
-          idExterno: `baixa-tp-${uuidv4()}`,
-        }),
-      );
+      const baixaId = uuidv4();
+      const { movimentoId, movimentoTarifaId } = await this.criarMovimentosBaixa(manager, {
+        baixaId,
+        contaBancariaId: dto.conta_bancaria_id,
+        dataBaixa: dto.data_baixa,
+        dto,
+        sentidoPrincipal: SentidoMovimento.DEBITO,
+        sentidoTarifa: SentidoMovimento.DEBITO,
+        descricaoBase: `Baixa título pagar ${titulo.descricao}`,
+      });
 
       const baixa = await manager.save(
         manager.create(Baixa, {
+          id: baixaId,
           empresaId,
           tituloPagarId: titulo.id,
           contaBancariaId: dto.conta_bancaria_id,
-          movimentoId: movimento.id,
+          movimentoId,
+          movimentoTarifaId,
           dataBaixa: dto.data_baixa,
           valorPrincipal: toMoneyString(dto.valor_principal),
           juros: toMoneyString(dto.juros ?? 0),
@@ -209,6 +293,7 @@ export class BaixasService {
         depois: { status: titulo.status, valor_pago: titulo.valorPago },
       });
 
+      const movimento = await manager.findOne(MovimentoBancario, { where: { id: movimentoId } });
       return { baixa, titulo, movimento };
     });
   }
@@ -261,26 +346,7 @@ export class BaixasService {
         await manager.save(titulo);
       }
 
-      if (baixa.movimentoId) {
-        const mov = await manager.findOne(MovimentoBancario, { where: { id: baixa.movimentoId } });
-        if (mov) {
-          await manager.save(
-            manager.create(MovimentoBancario, {
-              contaBancariaId: mov.contaBancariaId,
-              dataMovimento: new Date().toISOString().slice(0, 10),
-              dataHora: new Date(),
-              sentido:
-                mov.sentido === SentidoMovimento.CREDITO
-                  ? SentidoMovimento.DEBITO
-                  : SentidoMovimento.CREDITO,
-              valor: mov.valor,
-              descricao: `Estorno baixa ${baixa.id}`,
-              origem: OrigemMovimento.MANUAL,
-              idExterno: `estorno-${baixa.id}-${uuidv4()}`,
-            }),
-          );
-        }
-      }
+      await this.estornarMovimentosBaixa(manager, baixa);
 
       baixa.estornada = true;
       baixa.estornadaEm = new Date();

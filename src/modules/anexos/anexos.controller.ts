@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Param,
@@ -30,7 +31,19 @@ export class AnexosController {
     PapelUsuario.FINANCEIRO,
     PapelUsuario.OPERADOR,
   )
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      preservePath: true,
+      fileFilter: (_req, file, cb) => {
+        const nome = file.originalname ?? '';
+        if (nome.includes('..') || /[/\\]/.test(nome)) {
+          return cb(new BadRequestException('Nome de arquivo inválido') as Error, false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
   upload(
     @Req() req: ReqAuth,
     @UploadedFile() file: Express.Multer.File,

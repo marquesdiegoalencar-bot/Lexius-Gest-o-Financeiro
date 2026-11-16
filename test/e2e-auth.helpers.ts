@@ -55,3 +55,39 @@ export async function criarContaBancaria(
   expect(res.status).toBe(201);
   return res.body.id as string;
 }
+
+export async function saldoSistemaConta(
+  dataSource: DataSource,
+  contaId: string,
+): Promise<number> {
+  const [row] = await dataSource.query(
+    `SELECT saldo_sistema FROM v_saldo_conta WHERE conta_bancaria_id = $1`,
+    [contaId],
+  );
+  return Number(row?.saldo_sistema ?? 0);
+}
+
+export async function posicaoEmpresa(dataSource: DataSource, empresaId: string) {
+  const [row] = await dataSource.query(
+    `SELECT saldo_total_contas, a_repassar_credores, saldo_proprio
+     FROM v_posicao_empresa WHERE empresa_id = $1`,
+    [empresaId],
+  );
+  return {
+    saldoTotal: Number(row?.saldo_total_contas ?? 0),
+    aRepassar: Number(row?.a_repassar_credores ?? 0),
+    saldoProprio: Number(row?.saldo_proprio ?? 0),
+  };
+}
+
+export async function somaSaldoContasEmpresa(
+  dataSource: DataSource,
+  empresaId: string,
+): Promise<number> {
+  const [row] = await dataSource.query(
+    `SELECT COALESCE(SUM(saldo_sistema), 0)::float AS total
+     FROM v_saldo_conta WHERE empresa_id = $1`,
+    [empresaId],
+  );
+  return Number(row?.total ?? 0);
+}
