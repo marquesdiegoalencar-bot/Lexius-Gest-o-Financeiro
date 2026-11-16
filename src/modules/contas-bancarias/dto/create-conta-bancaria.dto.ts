@@ -34,6 +34,14 @@ export class CreateContaBancariaDto {
   sincroniza_extrato?: boolean;
 
   @IsOptional()
+  @IsString()
+  chave_pix?: string;
+
+  @IsOptional()
+  @IsString()
+  tipo_chave_pix?: string;
+
+  @IsOptional()
   @IsNumber()
   saldo_inicial?: number;
 

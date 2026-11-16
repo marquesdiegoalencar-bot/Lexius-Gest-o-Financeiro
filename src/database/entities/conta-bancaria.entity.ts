@@ -56,6 +56,12 @@ export class ContaBancaria {
   @Column({ name: 'credencial_ref', type: 'text', nullable: true })
   credencialRef!: string | null;
 
+  @Column({ name: 'chave_pix', type: 'text', nullable: true })
+  chavePix!: string | null;
+
+  @Column({ name: 'tipo_chave_pix', type: 'text', nullable: true })
+  tipoChavePix!: string | null;
+
   @Column({ name: 'sincroniza_extrato', default: false })
   sincronizaExtrato!: boolean;
 

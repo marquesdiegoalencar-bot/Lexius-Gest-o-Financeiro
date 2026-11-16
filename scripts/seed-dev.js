@@ -62,6 +62,21 @@ async function main() {
       [operadorId, empresaId],
     );
 
+    const conta = await client.query(
+      `SELECT id FROM contas_bancarias WHERE empresa_id = $1 AND banco_codigo = '077' LIMIT 1`,
+      [empresaId],
+    );
+    if (!conta.rows.length) {
+      await client.query(
+        `INSERT INTO contas_bancarias (
+          empresa_id, apelido, banco_codigo, agencia, conta, provedor, credencial_ref, chave_pix, tipo_chave_pix, sincroniza_extrato
+        ) VALUES ($1, 'Inter COB E2E', '077', '0001', '77701', 'INTER', 'e2e', 'e2e-chave-pix@test.local', 'EMAIL', true)
+        ON CONFLICT DO NOTHING`,
+        [empresaId],
+      );
+      console.log('Conta Inter COB (chave_pix) criada para emissão Pix');
+    }
+
     console.log('Vínculos OK. empresa_id=', empresaId);
   } finally {
     await client.end();

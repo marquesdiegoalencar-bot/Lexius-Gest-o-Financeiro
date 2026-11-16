@@ -1,19 +1,36 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
+import { gerarTxidCobv } from '../../common/utils/cobv-txid';
+import { soDigitos } from '../../common/utils/documento';
+import { fromMoney } from '../../common/utils/money';
 import { CobrancaBoleto } from '../../database/entities/cobranca-boleto.entity';
 import { ContaBancaria } from '../../database/entities/conta-bancaria.entity';
 import { Pessoa } from '../../database/entities/pessoa.entity';
 import { TituloReceber } from '../../database/entities/titulo-receber.entity';
-import { ProvedorBancario, StatusCobranca, StatusTitulo } from '../../database/enums';
-import { fromMoney } from '../../common/utils/money';
+import {
+  FormaPagamento,
+  ModalidadeCobranca,
+  ProvedorBancario,
+  StatusCobranca,
+  StatusTitulo,
+} from '../../database/enums';
 import { InterCobrancaHttpService } from '../banco/inter/inter-cobranca-http.service';
 import { normalizarConsultaCobrancaInter } from '../banco/inter/inter-cobranca.mapper';
+import { InterPixCobvHttpService } from '../banco/inter/inter-pix-cobv-http.service';
+import { montarBodyPutCobv, normalizarConsultaCobvInter } from '../banco/inter/inter-pix-cobv.mapper';
+
+const STATUS_COBRANCA_ATIVA = [StatusCobranca.EMITIDA, StatusCobranca.REGISTRADA];
 
 @Injectable()
 export class CobrancasService {
+  private readonly logger = new Logger(CobrancasService.name);
+
   constructor(
+    private config: ConfigService,
     private interCobranca: InterCobrancaHttpService,
+    private interPixCobv: InterPixCobvHttpService,
     @InjectRepository(CobrancaBoleto) private cobrancas: Repository<CobrancaBoleto>,
     @InjectRepository(TituloReceber) private titulos: Repository<TituloReceber>,
     @InjectRepository(ContaBancaria) private contas: Repository<ContaBancaria>,
@@ -29,14 +46,14 @@ export class CobrancasService {
 
     const contaId = contaBancariaId ?? titulo.contaBancariaId;
     if (!contaId) throw new BadRequestException('conta_bancaria_id obrigatória');
-    const conta = await this.contas.findOne({ where: { id: contaId, empresaId } });
-    if (!conta || conta.provedor !== ProvedorBancario.INTER) {
-      throw new BadRequestException('Conta Inter obrigatória');
-    }
-    if (!conta.credencialRef) throw new BadRequestException('credencial_ref ausente na conta');
+    const conta = await this.validarContaInter(contaId, empresaId, false);
 
     const existente = await this.cobrancas.findOne({
-      where: { tituloReceberId: tituloId, status: StatusCobranca.EMITIDA },
+      where: {
+        tituloReceberId: tituloId,
+        modalidade: ModalidadeCobranca.COBRANCA_V3,
+        status: In(STATUS_COBRANCA_ATIVA),
+      },
     });
     if (existente?.idExterno) {
       return { cobranca: existente, reutilizada: true };
@@ -64,17 +81,13 @@ export class CobrancasService {
       },
     };
 
-    const res = await this.interCobranca.emitirCobranca(
-      conta.credencialRef,
-      conta.conta,
-      emitirBody,
-    );
+    const res = await this.interCobranca.emitirCobranca(conta.credencialRef!, conta.conta, emitirBody);
     const codigo = String(res.codigoSolicitacao ?? '');
     if (!codigo) throw new BadRequestException('Inter não retornou codigoSolicitacao');
 
     let consultaRaw: Record<string, unknown> = {};
     try {
-      consultaRaw = await this.interCobranca.consultarCobranca(conta.credencialRef, conta.conta, codigo);
+      consultaRaw = await this.interCobranca.consultarCobranca(conta.credencialRef!, conta.conta, codigo);
     } catch {
       consultaRaw = { cobranca: { codigoSolicitacao: codigo, situacao: 'EMITIDA' } };
     }
@@ -86,6 +99,7 @@ export class CobrancasService {
         tituloReceberId: titulo.id,
         contaBancariaId: conta.id,
         provedor: ProvedorBancario.INTER,
+        modalidade: ModalidadeCobranca.COBRANCA_V3,
         idExterno: codigo,
         valor: String(valor),
         dataVencimento: titulo.dataVencimento,
@@ -99,6 +113,153 @@ export class CobrancasService {
     return { cobranca, reutilizada: false };
   }
 
+  async emitirPixCobvTitulo(
+    tituloId: string,
+    empresaId: string,
+    contaBancariaId?: string,
+    opcoes?: { reemitir?: boolean },
+  ) {
+    const titulo = await this.titulos.findOne({ where: { id: tituloId, empresaId } });
+    if (!titulo) throw new NotFoundException('Título não encontrado');
+    if (![StatusTitulo.ABERTO, StatusTitulo.PARCIAL, StatusTitulo.VENCIDO].includes(titulo.status)) {
+      throw new BadRequestException('Título não permite emissão de Pix cobv');
+    }
+
+    const contaId = contaBancariaId ?? titulo.contaBancariaId;
+    if (!contaId) throw new BadRequestException('conta_bancaria_id obrigatória');
+    const conta = await this.validarContaInter(contaId, empresaId, true);
+
+    const pessoa = titulo.pessoaId
+      ? await this.pessoas.findOne({ where: { id: titulo.pessoaId } })
+      : null;
+    this.validarDevedor(pessoa);
+
+    const ativa = await this.cobrancas.findOne({
+      where: {
+        tituloReceberId: tituloId,
+        modalidade: ModalidadeCobranca.PIX_COBV,
+        status: In(STATUS_COBRANCA_ATIVA),
+      },
+    });
+    if (ativa?.idExterno && !opcoes?.reemitir) {
+      return { cobranca: ativa, reutilizada: true };
+    }
+
+    if (opcoes?.reemitir && ativa) {
+      throw new BadRequestException('Existe cobv ativa; cancele ou aguarde expiração antes de reemitir');
+    }
+
+    const anteriores = await this.cobrancas.count({
+      where: { tituloReceberId: tituloId, modalidade: ModalidadeCobranca.PIX_COBV },
+    });
+    const txid = gerarTxidCobv(titulo.id, String(anteriores));
+    const valor = fromMoney(titulo.valorOriginal);
+    const doc = soDigitos(pessoa!.documento)!;
+
+    const body = montarBodyPutCobv({
+      txid,
+      chavePix: conta.chavePix!,
+      valor,
+      dataVencimento: titulo.dataVencimento,
+      devedorNome: pessoa!.nome,
+      devedorCpfCnpj: doc,
+      solicitacaoPagador: titulo.descricao,
+    });
+
+    await this.interPixCobv.criarCobv(conta.credencialRef!, conta.conta, txid, body);
+
+    let consultaRaw: Record<string, unknown> = {};
+    try {
+      consultaRaw = await this.interPixCobv.consultarCobv(conta.credencialRef!, conta.conta, txid);
+    } catch {
+      consultaRaw = { txid, status: 'ATIVA' };
+    }
+    const norm = normalizarConsultaCobvInter(txid, consultaRaw);
+
+    const cobranca = await this.cobrancas.save(
+      this.cobrancas.create({
+        empresaId,
+        tituloReceberId: titulo.id,
+        contaBancariaId: conta.id,
+        provedor: ProvedorBancario.INTER,
+        modalidade: ModalidadeCobranca.PIX_COBV,
+        idExterno: txid,
+        txid,
+        valor: String(valor),
+        dataVencimento: titulo.dataVencimento,
+        status: StatusCobranca.REGISTRADA,
+        pixCopiaCola: norm.pixCopiaECola,
+      }),
+    );
+
+    return { cobranca, reutilizada: false, txid };
+  }
+
+  async reemitirPixCobvTitulo(tituloId: string, empresaId: string, contaBancariaId?: string) {
+    const ultima = await this.cobrancas.findOne({
+      where: { tituloReceberId: tituloId, modalidade: ModalidadeCobranca.PIX_COBV },
+      order: { criadaEm: 'DESC' },
+    });
+    if (!ultima || ultima.status !== StatusCobranca.EXPIRADA) {
+      throw new BadRequestException(
+        'Reemissão exige cobv anterior EXPIRADA (vencida e fora do prazo de pagamento)',
+      );
+    }
+    return this.emitirPixCobvTitulo(tituloId, empresaId, contaBancariaId, { reemitir: true });
+  }
+
+  async emitirCobvParaTitulos(titulos: TituloReceber[], empresaId: string, contaBancariaId: string) {
+    const emissoes: Array<{ titulo_id: string; reutilizada: boolean; cobranca_id?: string; erro?: string }> = [];
+    for (const titulo of titulos) {
+      if (titulo.formaPrevista !== FormaPagamento.PIX) continue;
+      try {
+        const res = await this.emitirPixCobvTitulo(titulo.id, empresaId, contaBancariaId);
+        emissoes.push({
+          titulo_id: titulo.id,
+          reutilizada: res.reutilizada,
+          cobranca_id: res.cobranca.id,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'ERRO_EMISSAO';
+        this.logger.warn(`Emissão cobv titulo ${titulo.id}: ${msg}`);
+        emissoes.push({ titulo_id: titulo.id, reutilizada: false, erro: msg });
+      }
+    }
+    return emissoes;
+  }
+
+  async resolverContaInterCobranca(empresaId: string, contaId?: string): Promise<ContaBancaria> {
+    const id = contaId ?? this.config.get<string>('COB_CONTA_BANCARIA_ID');
+    if (id) {
+      return this.validarContaInter(id, empresaId, true);
+    }
+    const conta = await this.contas.findOne({
+      where: { empresaId, provedor: ProvedorBancario.INTER, ativa: true },
+      order: { apelido: 'ASC' },
+    });
+    if (!conta) {
+      throw new BadRequestException(
+        'Nenhuma conta Inter configurada para emissão Pix. Defina COB_CONTA_BANCARIA_ID ou cadastre uma conta Inter ativa.',
+      );
+    }
+    return this.validarContaInter(conta.id, empresaId, true);
+  }
+
+  async registrarWebhookPixConta(
+    contaId: string,
+    empresaId: string,
+    webhookUrl?: string,
+  ): Promise<Record<string, unknown>> {
+    const conta = await this.validarContaInter(contaId, empresaId, true);
+    const url =
+      webhookUrl?.trim() ||
+      this.config.get<string>('PUBLIC_WEBHOOK_INTER_URL')?.trim();
+    if (!url) {
+      throw new BadRequestException('Informe webhook_url ou configure PUBLIC_WEBHOOK_INTER_URL');
+    }
+    return this.interPixCobv.cadastrarWebhookPix(conta.credencialRef!, conta.conta, conta.chavePix!, url);
+  }
+
   async simularPagamentoMock(
     cobrancaId: string,
     empresaId: string,
@@ -106,7 +267,68 @@ export class CobrancasService {
   ) {
     const cobranca = await this.cobrancas.findOne({ where: { id: cobrancaId, empresaId } });
     if (!cobranca?.idExterno) throw new NotFoundException('Cobrança não encontrada');
-    this.interCobranca.simularPagamentoMock(cobranca.idExterno, opcoes);
+    if (cobranca.modalidade !== ModalidadeCobranca.COBRANCA_V3) {
+      throw new BadRequestException('Simulação v3 apenas para modalidade COBRANCA_V3');
+    }
+    this.interCobranca.simularPagamentoMock(cobranca.idExterno, {
+      valorTotalRecebido: opcoes.valorTotalRecebido,
+      juros: opcoes.juros,
+      multa: opcoes.multa,
+      desconto: opcoes.desconto,
+    });
     return { ok: true };
+  }
+
+  async simularPagamentoCobvMock(
+    cobrancaId: string,
+    empresaId: string,
+    opcoes: { valor: number; juros?: number; multa?: number; desconto?: number },
+  ) {
+    const cobranca = await this.cobrancas.findOne({ where: { id: cobrancaId, empresaId } });
+    const txid = cobranca?.txid ?? cobranca?.idExterno;
+    if (!cobranca || cobranca.modalidade !== ModalidadeCobranca.PIX_COBV || !txid) {
+      throw new NotFoundException('Cobv não encontrada');
+    }
+    this.interPixCobv.simularPagamentoCobvMock(txid, opcoes);
+    return { ok: true, txid };
+  }
+
+  private validarDevedor(pessoa: Pessoa | null) {
+    if (!pessoa?.nome?.trim()) {
+      throw new BadRequestException(
+        'Emissão recusada: informe o nome do devedor (pessoa vinculada ao título).',
+      );
+    }
+    const doc = soDigitos(pessoa.documento);
+    if (!doc || (doc.length !== 11 && doc.length !== 14)) {
+      throw new BadRequestException(
+        'Emissão recusada: informe CPF ou CNPJ válido do devedor na pessoa vinculada.',
+      );
+    }
+  }
+
+  private async validarContaInter(
+    contaId: string,
+    empresaId: string,
+    exigeChavePix: boolean,
+  ): Promise<ContaBancaria> {
+    const conta = await this.contas.findOne({ where: { id: contaId, empresaId } });
+    if (!conta || !conta.ativa) {
+      throw new BadRequestException(
+        'Emissão recusada: conta bancária Inter ativa não encontrada para esta empresa.',
+      );
+    }
+    if (conta.provedor !== ProvedorBancario.INTER) {
+      throw new BadRequestException('Emissão recusada: o provedor da conta deve ser INTER.');
+    }
+    if (!conta.credencialRef?.trim()) {
+      throw new BadRequestException('Emissão recusada: configure credencial_ref na conta Inter.');
+    }
+    if (exigeChavePix && !conta.chavePix?.trim()) {
+      throw new BadRequestException(
+        'Emissão recusada: configure chave_pix na conta bancária Inter (chave cadastrada no Internet Banking).',
+      );
+    }
+    return conta;
   }
 }

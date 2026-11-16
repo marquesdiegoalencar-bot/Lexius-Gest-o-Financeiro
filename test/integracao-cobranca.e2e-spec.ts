@@ -54,6 +54,11 @@ describe('POST /v1/integracao/cobranca/acordos (e2e)', () => {
     expect(res.status).toBe(201);
     expect(res.body.idempotente).toBe(false);
     expect(res.body.titulos).toHaveLength(5);
+    expect(res.body.emissoes_pix?.length).toBe(5);
+    const falhas = (res.body.emissoes_pix as Array<{ erro?: string; titulo_id: string }>)?.filter(
+      (e) => !(e as { cobranca_id?: string }).cobranca_id,
+    );
+    expect(falhas).toEqual([]);
 
     const [{ count }] = await dataSource.query(
       `SELECT count(*)::int AS count FROM titulos_receber WHERE cobranca_acordo_id = $1`,

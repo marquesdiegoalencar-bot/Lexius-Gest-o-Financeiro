@@ -84,4 +84,29 @@ export class TitulosReceberController {
   ) {
     return this.cobrancas.emitirBoletoTitulo(id, req.empresaId, body?.conta_bancaria_id);
   }
+
+  @Post(':id/emitir-pix-cobv')
+  @RequirePapeis(
+    PapelUsuario.MASTER,
+    PapelUsuario.ADMIN,
+    PapelUsuario.FINANCEIRO,
+    PapelUsuario.OPERADOR,
+  )
+  emitirPixCobv(
+    @Param('id') id: string,
+    @Req() req: ReqAuth,
+    @Body() body?: { conta_bancaria_id?: string },
+  ) {
+    return this.cobrancas.emitirPixCobvTitulo(id, req.empresaId, body?.conta_bancaria_id);
+  }
+
+  @Post(':id/reemitir-pix-cobv')
+  @RequirePapeis(PapelUsuario.MASTER, PapelUsuario.ADMIN, PapelUsuario.FINANCEIRO)
+  reemitirPixCobv(
+    @Param('id') id: string,
+    @Req() req: ReqAuth,
+    @Body() body?: { conta_bancaria_id?: string },
+  ) {
+    return this.cobrancas.reemitirPixCobvTitulo(id, req.empresaId, body?.conta_bancaria_id);
+  }
 }

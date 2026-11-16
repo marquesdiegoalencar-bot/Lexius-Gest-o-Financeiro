@@ -3,6 +3,7 @@ import { RequirePapeis } from '../../common/decorators/papeis.decorator';
 import { PapelGuard } from '../../common/guards/papel.guard';
 import { PapelUsuario } from '../../database/enums';
 import { FormaPagamento } from '../../database/enums';
+import { CobrancasService } from '../cobrancas/cobrancas.service';
 import { TarifasCobrancaService } from '../tarifas-cobranca/tarifas-cobranca.service';
 import { ContasBancariasService } from './contas-bancarias.service';
 import { ConsultarExtratoDto } from './dto/consultar-extrato.dto';
@@ -15,6 +16,7 @@ export class ContasBancariasController {
   constructor(
     private service: ContasBancariasService,
     private tarifas: TarifasCobrancaService,
+    private cobrancas: CobrancasService,
   ) {}
 
   @Get()
@@ -117,5 +119,15 @@ export class ContasBancariasController {
   async listarTarifasCobranca(@Param('id') id: string, @Req() req: { empresaId: string }) {
     await this.service.findOne(id, req.empresaId);
     return this.tarifas.listarPorConta(id);
+  }
+
+  @Post(':id/inter-pix-webhook')
+  @RequirePapeis(PapelUsuario.MASTER)
+  registrarWebhookPix(
+    @Param('id') id: string,
+    @Req() req: { empresaId: string },
+    @Body() body: { webhook_url?: string },
+  ) {
+    return this.cobrancas.registrarWebhookPixConta(id, req.empresaId, body.webhook_url);
   }
 }

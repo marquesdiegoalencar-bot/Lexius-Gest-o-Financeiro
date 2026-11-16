@@ -6,6 +6,7 @@ import { Empresa } from '../../database/entities/empresa.entity';
 import { Pessoa } from '../../database/entities/pessoa.entity';
 import { TituloReceber } from '../../database/entities/titulo-receber.entity';
 import { CategoriasModule } from '../categorias/categorias.module';
+import { CobrancasModule } from '../cobrancas/cobrancas.module';
 import { IntegracaoCobrancaController } from './integracao-cobranca.controller';
 import { IntegracaoCobrancaService } from './integracao-cobranca.service';
 
@@ -13,6 +14,7 @@ import { IntegracaoCobrancaService } from './integracao-cobranca.service';
   imports: [
     TypeOrmModule.forFeature([Empresa, CobrancaAcordo, Pessoa, TituloReceber]),
     CategoriasModule,
+    CobrancasModule,
   ],
   controllers: [IntegracaoCobrancaController],
   providers: [IntegracaoCobrancaService, CobIntegracaoGuard],

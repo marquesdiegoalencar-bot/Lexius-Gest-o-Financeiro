@@ -21,6 +21,7 @@ CREATE TYPE origem_titulo       AS ENUM ('MANUAL','COBRANCA_BOLETO','COBRANCA_AC
 CREATE TYPE sentido_movimento   AS ENUM ('CREDITO','DEBITO');
 CREATE TYPE origem_movimento    AS ENUM ('API_BANCO','OFX','MANUAL','BAIXA','TRANSFERENCIA','REPASSE','AJUSTE');
 CREATE TYPE status_cobranca     AS ENUM ('EMITIDA','REGISTRADA','PAGA','VENCIDA','CANCELADA','EXPIRADA','ERRO');
+CREATE TYPE modalidade_cobranca AS ENUM ('COBRANCA_V3','PIX_COBV');
 CREATE TYPE tipo_pagamento_bancario AS ENUM ('PIX','BOLETO','TED','TRANSFERENCIA_INTERNA','DARF','SAQUE');
 CREATE TYPE status_pagamento_bancario AS ENUM ('RASCUNHO','AGUARDANDO_APROVACAO','APROVADO','REJEITADO','ENVIADO','AGENDADO','EFETIVADO','FALHOU','CANCELADO');
 CREATE TYPE status_repasse      AS ENUM ('RASCUNHO','CALCULADO','AGUARDANDO_APROVACAO','APROVADO','PAGO','CANCELADO');
@@ -133,6 +134,8 @@ CREATE TABLE contas_bancarias (
     saldo_banco   NUMERIC(14,2),              -- último saldo lido da API
     saldo_banco_em TIMESTAMPTZ,
     credencial_ref TEXT,                      -- referência no cofre de segredos (NUNCA a credencial em si)
+    chave_pix     TEXT,                       -- chave receptora Pix (cadastrada no IBPJ; obrigatória p/ cobv)
+    tipo_chave_pix TEXT,                      -- CPF, CNPJ, EMAIL, TELEFONE, ALEATORIA
     sincroniza_extrato BOOLEAN NOT NULL DEFAULT FALSE,
     ultima_sincronizacao TIMESTAMPTZ,
     ativa         BOOLEAN NOT NULL DEFAULT TRUE,
@@ -376,7 +379,8 @@ CREATE TABLE cobrancas_boleto (
     titulo_receber_id UUID NOT NULL REFERENCES titulos_receber(id),
     conta_bancaria_id UUID NOT NULL REFERENCES contas_bancarias(id),
     provedor      provedor_bancario NOT NULL,         -- ASAAS (legado) ou INTER
-    id_externo    TEXT,                               -- codigoSolicitacao (Inter) / id (Asaas)
+    modalidade    modalidade_cobranca NOT NULL DEFAULT 'COBRANCA_V3',
+    id_externo    TEXT,                               -- codigoSolicitacao (v3) ou txid (cobv)
     nosso_numero  TEXT,
     linha_digitavel TEXT,
     codigo_barras TEXT,
@@ -393,6 +397,7 @@ CREATE TABLE cobrancas_boleto (
     UNIQUE (provedor, id_externo)
 );
 CREATE INDEX idx_cb_titulo ON cobrancas_boleto(titulo_receber_id);
+CREATE INDEX idx_cobrancas_modalidade_status ON cobrancas_boleto(modalidade, status);
 
 -- Tarifa de cobrança por conta e forma (boleto / Pix)
 CREATE TABLE conta_tarifas_cobranca (

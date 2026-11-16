@@ -7,16 +7,18 @@
 | **3B-2** | `cursor/pr-3b2-pix-cobv-bafb` | 3B | Pix cobrança com vencimento (`/pix/v2/cobv`), título só-Pix |
 | **3C** | `cursor/pr-3c-cob-retorno-bafb` | 3B-2 | Webhooks HMAC `titulo.baixado` / `acordo.atualizado` ao COB |
 
-## PR 3B-2 — Pix cobrança vencimento (cobv) — planejado
+## PR 3B-2 — Pix cobrança vencimento (cobv) — entregue
 
-Documentação Inter (developers.inter.co): API **Pix v2**, não confundir com Cobrança v3 (boleto+QR).
+Documentação: `docs/INTER-PIX-COBV-API.md`. API **Pix v2**, distinta da Cobrança v3.
 
 | Operação | Path | Escopos |
 |----------|------|---------|
-| Emitir cobv | `POST /pix/v2/cobv` | `cobv.write`, `payloadlocation.write` (se usar location) |
+| Emitir cobv | `PUT /pix/v2/cobv/{txid}` | `cobv.write` |
 | Consultar cobv | `GET /pix/v2/cobv/{txid}` | `cobv.read` |
 | Webhook Pix (por chave) | `PUT /pix/v2/webhook/{chave}` | `webhook.write` |
 | Callback pagamento | validação **mTLS** (mesmo modelo de callback) | — |
+
+Endpoints Lexius: `POST /v1/titulos-receber/:id/emitir-pix-cobv`, `reemitir-pix-cobv`, acordo COB Pix emite cobv por parcela; `POST /v1/contas-bancarias/:id/inter-pix-webhook` (MASTER).
 
 **Chave Pix:** cadastrada na conta Inter; emissão v3 usa chave padrão automaticamente; em cobv a chave entra no path do webhook e no payload (`chave` / `chavePix` conforme spec BACEN/Inter).
 

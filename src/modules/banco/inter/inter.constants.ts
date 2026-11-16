@@ -13,3 +13,15 @@ export const INTER_PATH_EXTRATO = '/banking/v2/extrato';
 /** Base relativos à URL .../cobranca/v3 */
 export const INTER_COBRANCA_V3 = '/cobranca/v3';
 export const INTER_COBRANCA_EMITIR = `${INTER_COBRANCA_V3}/cobrancas`;
+
+/**
+ * API Pix v2 (confirmado via documentação espelhada do portal Inter — paths abaixo).
+ * Ver docs/INTER-PIX-COBV-API.md para confirmação no OpenAPI do portal.
+ */
+export const INTER_PIX_V2 = '/pix/v2';
+export const interPixPathCobv = (txid: string) =>
+  `${INTER_PIX_V2}/cobv/${encodeURIComponent(txid)}`;
+export const interPixPathCobvPagamentoSandbox = (txid: string) =>
+  `${INTER_PIX_V2}/cobv/${encodeURIComponent(txid)}/pagamento`;
+export const interPixPathWebhook = (chavePix: string) =>
+  `${INTER_PIX_V2}/webhook/${encodeURIComponent(chavePix)}`;

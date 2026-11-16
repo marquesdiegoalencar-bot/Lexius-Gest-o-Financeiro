@@ -8,4 +8,12 @@ export class UpdateContaBancariaDto {
   @IsOptional()
   @IsBoolean()
   ativa?: boolean;
+
+  @IsOptional()
+  @IsString()
+  chave_pix?: string;
+
+  @IsOptional()
+  @IsString()
+  tipo_chave_pix?: string;
 }

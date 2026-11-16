@@ -100,3 +100,9 @@ export enum StatusCobranca {
   EXPIRADA = 'EXPIRADA',
   ERRO = 'ERRO',
 }
+
+/** Discrimina cobrança registrada em cobrancas_boleto (Inter). */
+export enum ModalidadeCobranca {
+  COBRANCA_V3 = 'COBRANCA_V3',
+  PIX_COBV = 'PIX_COBV',
+}

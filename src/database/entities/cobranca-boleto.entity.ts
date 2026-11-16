@@ -1,5 +1,5 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, Unique } from 'typeorm';
-import { ProvedorBancario, StatusCobranca } from '../enums';
+import { ModalidadeCobranca, ProvedorBancario, StatusCobranca } from '../enums';
 
 @Entity('cobrancas_boleto')
 @Unique(['provedor', 'idExterno'])
@@ -18,6 +18,14 @@ export class CobrancaBoleto {
 
   @Column({ type: 'enum', enum: ProvedorBancario, enumName: 'provedor_bancario' })
   provedor!: ProvedorBancario;
+
+  @Column({
+    type: 'enum',
+    enum: ModalidadeCobranca,
+    enumName: 'modalidade_cobranca',
+    default: ModalidadeCobranca.COBRANCA_V3,
+  })
+  modalidade!: ModalidadeCobranca;
 
   @Column({ name: 'id_externo', type: 'text', nullable: true })
   idExterno!: string | null;
