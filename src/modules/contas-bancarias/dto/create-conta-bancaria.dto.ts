@@ -1,5 +1,5 @@
-import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, Length } from 'class-validator';
-import { TipoContaBancaria } from '../../../database/enums';
+import { IsBoolean, IsDateString, IsEnum, IsNumber, IsOptional, IsString, Length } from 'class-validator';
+import { ProvedorBancario, TipoContaBancaria } from '../../../database/enums';
 
 export class CreateContaBancariaDto {
   @IsString()
@@ -20,6 +20,18 @@ export class CreateContaBancariaDto {
   @IsOptional()
   @IsEnum(TipoContaBancaria)
   tipo?: TipoContaBancaria;
+
+  @IsOptional()
+  @IsEnum(ProvedorBancario)
+  provedor?: ProvedorBancario;
+
+  @IsOptional()
+  @IsString()
+  credencial_ref?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  sincroniza_extrato?: boolean;
 
   @IsOptional()
   @IsNumber()
