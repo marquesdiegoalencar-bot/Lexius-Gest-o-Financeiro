@@ -44,6 +44,7 @@ CREATE TABLE usuarios (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nome          TEXT NOT NULL,
     email         TEXT NOT NULL UNIQUE,
+    senha_hash    TEXT,                      -- auth local (Fase 1); SSO COB substitui depois
     cobranca_user_id TEXT,                 -- vínculo com usuário do Lexius COB (SSO)
     mfa_ativo     BOOLEAN NOT NULL DEFAULT FALSE,
     ativo         BOOLEAN NOT NULL DEFAULT TRUE,
