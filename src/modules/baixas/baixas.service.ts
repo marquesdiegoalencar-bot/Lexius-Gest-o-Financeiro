@@ -27,6 +27,7 @@ import {
   StatusAprovacaoTituloPagar,
   StatusTitulo,
 } from '../../database/enums';
+import { CobRetornoService } from '../integracao-cobranca-retorno/cob-retorno.service';
 import { BaixarTituloDto } from './dto/baixar-titulo.dto';
 import { EstornarBaixaDto } from './dto/estornar-baixa.dto';
 
@@ -35,6 +36,7 @@ export class BaixasService {
   constructor(
     private dataSource: DataSource,
     private auditoria: AuditoriaService,
+    private cobRetorno: CobRetornoService,
     @InjectRepository(Baixa) private baixas: Repository<Baixa>,
     @InjectRepository(TituloReceber) private titulosReceber: Repository<TituloReceber>,
     @InjectRepository(TituloPagar) private titulosPagar: Repository<TituloPagar>,
@@ -159,7 +161,18 @@ export class BaixasService {
     const valorLiquido = this.calcValorLiquido(dto);
     await this.validarConta(empresaId, dto.conta_bancaria_id);
 
-    return this.executarBaixaReceber(tituloId, empresaId, usuarioId, dto, valorLiquido, opcoes);
+    const resultado = await this.executarBaixaReceber(
+      tituloId,
+      empresaId,
+      usuarioId,
+      dto,
+      valorLiquido,
+      opcoes,
+    );
+    if (!resultado.idempotente) {
+      this.cobRetorno.agendarAposBaixaReceber(resultado.baixa.id);
+    }
+    return resultado;
   }
 
   /** Baixa automática (webhook/job) reutiliza o mesmo núcleo da baixa manual. */
@@ -171,12 +184,16 @@ export class BaixasService {
   ) {
     const valorLiquido = this.calcValorLiquido(dto);
     const bruto = this.valorBrutoMovimento(dto);
-    return this.executarBaixaReceber(tituloId, empresaId, null, dto, valorLiquido, {
+    const resultado = await this.executarBaixaReceber(tituloId, empresaId, null, dto, valorLiquido, {
       automatica: true,
       origemEventoId,
       origemMovimento: OrigemMovimento.API_BANCO,
       valorCreditadoTitulo: bruto,
     });
+    if (!resultado.idempotente) {
+      this.cobRetorno.agendarAposBaixaReceber(resultado.baixa.id);
+    }
+    return resultado;
   }
 
   private async executarBaixaReceber(
@@ -417,6 +434,12 @@ export class BaixasService {
         depois: { estornada: true, motivo: dto.motivo },
       });
 
+      const idEstornado = baixa.id;
+      setImmediate(() => {
+        if (baixa.tituloReceberId) {
+          this.cobRetorno.agendarAposEstornoBaixaReceber(idEstornado);
+        }
+      });
       return baixa;
     });
   }

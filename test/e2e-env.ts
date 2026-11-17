@@ -21,4 +21,11 @@ export function applyE2eEnv(): void {
   process.env.INTER_SANDBOX = process.env.INTER_SANDBOX ?? 'true';
   process.env.WEBHOOK_INTER_MOCK_SECRET =
     process.env.WEBHOOK_INTER_MOCK_SECRET ?? 'e2e-webhook-inter-secret';
+  process.env.COB_RETORNO_API_KEY =
+    process.env.COB_RETORNO_API_KEY ?? process.env.COB_INTEGRACAO_API_KEY ?? 'e2e-cob-api-key';
+  process.env.COB_RETORNO_HMAC_SECRET =
+    process.env.COB_RETORNO_HMAC_SECRET ??
+    process.env.COB_INTEGRACAO_HMAC_SECRET ??
+    'e2e-hmac-secret';
+  process.env.COB_RETORNO_MAX_TENTATIVAS = process.env.COB_RETORNO_MAX_TENTATIVAS ?? '5';
 }

@@ -9,6 +9,7 @@ import { InterPixCobvHttpService } from '../banco/inter/inter-pix-cobv-http.serv
 import { CobrancasService } from './cobrancas.service';
 import { CobrancaVerificacaoService } from './cobranca-verificacao.service';
 import { WebhooksInterService } from '../webhooks/webhooks-inter.service';
+import { CobRetornoService } from '../integracao-cobranca-retorno/cob-retorno.service';
 
 @Injectable()
 export class CobrancaJobsService implements OnModuleInit {
@@ -23,6 +24,7 @@ export class CobrancaJobsService implements OnModuleInit {
     private interCobranca: InterCobrancaHttpService,
     private interPixCobv: InterPixCobvHttpService,
     @InjectRepository(CobrancaBoleto) private cobrancaRepo: Repository<CobrancaBoleto>,
+    private cobRetorno: CobRetornoService,
   ) {}
 
   onModuleInit() {
@@ -35,6 +37,7 @@ export class CobrancaJobsService implements OnModuleInit {
   async executarCiclo() {
     await this.webhooks.reprocessarPendentes();
     await this.cobrancasService.processarEmissaoPendentes();
+    await this.cobRetorno.processarPendentes();
     await this.consultarCobrancasAbertas();
   }
 
