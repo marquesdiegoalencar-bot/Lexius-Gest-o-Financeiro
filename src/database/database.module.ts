@@ -10,6 +10,11 @@ import { CobrancaAcordo } from './entities/cobranca-acordo.entity';
 import { CobrancaBoleto } from './entities/cobranca-boleto.entity';
 import { CobrancaEmissaoPendente } from './entities/cobranca-emissao-pendente.entity';
 import { CobRetornoEvento } from './entities/cob-retorno-evento.entity';
+import { CredorRegraRepasse } from './entities/credor-regra-repasse.entity';
+import { PagamentoBancario } from './entities/pagamento-bancario.entity';
+import { PessoaDadosBancarios } from './entities/pessoa-dados-bancarios.entity';
+import { RepasseItem } from './entities/repasse-item.entity';
+import { Repasse } from './entities/repasse.entity';
 import { ContaTarifaCobranca } from './entities/conta-tarifa-cobranca.entity';
 import { WebhookEvento } from './entities/webhook-evento.entity';
 import { ContaBancaria } from './entities/conta-bancaria.entity';
@@ -43,6 +48,11 @@ const entities = [
   CobrancaBoleto,
   CobrancaEmissaoPendente,
   CobRetornoEvento,
+  Repasse,
+  RepasseItem,
+  CredorRegraRepasse,
+  PessoaDadosBancarios,
+  PagamentoBancario,
   WebhookEvento,
   ContaTarifaCobranca,
 ];

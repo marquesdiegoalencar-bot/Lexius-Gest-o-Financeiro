@@ -18,6 +18,7 @@ import { IntergrupoModule } from './modules/intergrupo/intergrupo.module';
 import { PessoasModule } from './modules/pessoas/pessoas.module';
 import { RecorrenciasModule } from './modules/recorrencias/recorrencias.module';
 import { RelatoriosModule } from './modules/relatorios/relatorios.module';
+import { RepassesModule } from './modules/repasses/repasses.module';
 import { TitulosPagarModule } from './modules/titulos-pagar/titulos-pagar.module';
 import { TitulosReceberModule } from './modules/titulos-receber/titulos-receber.module';
 import { UsuariosModule } from './modules/usuarios/usuarios.module';
@@ -48,6 +49,7 @@ import { UsuariosModule } from './modules/usuarios/usuarios.module';
     AnexosModule,
     IntergrupoModule,
     RelatoriosModule,
+    RepassesModule,
   ],
 })
 export class AppModule {}
