@@ -13,7 +13,10 @@
     "test": "jest",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:migrate": "node scripts/migrate.js",
-    "db:seed:dev": "node scripts/seed-dev.js"
+    "db:seed:dev": "node scripts/seed-dev.js",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:preview": "npm --prefix frontend run preview"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.17",
