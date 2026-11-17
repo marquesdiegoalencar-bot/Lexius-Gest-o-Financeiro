@@ -53,6 +53,8 @@ export class ContasBancariasService {
         dataSaldoInicial: dto.data_saldo_inicial ?? new Date().toISOString().slice(0, 10),
         sincronizaExtrato: dto.sincroniza_extrato ?? provedor === ProvedorBancario.INTER,
         credencialRef: dto.credencial_ref?.trim() ?? null,
+        chavePix: dto.chave_pix?.trim() ?? null,
+        tipoChavePix: dto.tipo_chave_pix?.trim() ?? null,
       }),
     );
   }
@@ -61,6 +63,8 @@ export class ContasBancariasService {
     const conta = await this.findOne(id, empresaId);
     if (dto.apelido !== undefined) conta.apelido = dto.apelido;
     if (dto.ativa !== undefined) conta.ativa = dto.ativa;
+    if (dto.chave_pix !== undefined) conta.chavePix = dto.chave_pix?.trim() ?? null;
+    if (dto.tipo_chave_pix !== undefined) conta.tipoChavePix = dto.tipo_chave_pix?.trim() ?? null;
     return this.repo.save(conta);
   }
 

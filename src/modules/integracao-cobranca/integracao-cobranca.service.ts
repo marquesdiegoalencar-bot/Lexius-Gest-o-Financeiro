@@ -9,6 +9,7 @@ import { Empresa } from '../../database/entities/empresa.entity';
 import { Pessoa } from '../../database/entities/pessoa.entity';
 import { TituloReceber } from '../../database/entities/titulo-receber.entity';
 import { CategoriasService } from '../categorias/categorias.service';
+import { CobrancasService } from '../cobrancas/cobrancas.service';
 import { ReceberAcordoDto } from './dto/receber-acordo.dto';
 
 @Injectable()
@@ -17,6 +18,7 @@ export class IntegracaoCobrancaService {
     private dataSource: DataSource,
     private config: ConfigService,
     private categorias: CategoriasService,
+    private cobrancas: CobrancasService,
     @InjectRepository(Empresa) private empresas: Repository<Empresa>,
     @InjectRepository(CobrancaAcordo) private acordos: Repository<CobrancaAcordo>,
     @InjectRepository(Pessoa) private pessoas: Repository<Pessoa>,
@@ -92,14 +94,15 @@ export class IntegracaoCobrancaService {
         where: { acordoId: existente.id },
         order: { parcelaNumero: 'ASC' },
       });
-      return this.mapResposta(existente, titulos, true);
+      const emissoesPix = await this.emitirCobvAcordoSePix(existente.empresaId, existente.formaPagamento, titulos);
+      return this.mapResposta(existente, titulos, true, emissoesPix);
     }
 
     const categoria = await this.categorias.findRecebimentoCobrancaGlobal();
     const forma =
       dto.forma_pagamento === 'PIX' ? FormaPagamento.PIX : FormaPagamento.BOLETO;
 
-    return this.dataSource.transaction(async (manager) => {
+    const resultado = await this.dataSource.transaction(async (manager) => {
       const devedor = await this.upsertPessoa(dto.devedor, { ehCredor: false });
       const credor = await this.upsertPessoa(dto.credor, { ehCredor: true });
 
@@ -157,11 +160,45 @@ export class IntegracaoCobrancaService {
         titulosCriados.push(titulo);
       }
 
-      return this.mapResposta(acordo, titulosCriados, false);
+      return { acordo, titulosCriados, forma, empresaId: empresa.id };
     });
+
+    const emissoesPix = await this.emitirCobvAcordoSePix(
+      resultado.empresaId,
+      resultado.forma,
+      resultado.titulosCriados,
+    );
+    return this.mapResposta(resultado.acordo, resultado.titulosCriados, false, emissoesPix);
   }
 
-  private mapResposta(acordo: CobrancaAcordo, titulos: TituloReceber[], idempotente: boolean) {
+  private async emitirCobvAcordoSePix(
+    empresaId: string,
+    forma: FormaPagamento,
+    titulos: TituloReceber[],
+  ) {
+    if (forma !== FormaPagamento.PIX || titulos.length === 0) return [];
+    try {
+      const conta = await this.cobrancas.resolverContaInterCobranca(empresaId);
+      return this.cobrancas.emitirCobvParaTitulos(titulos, empresaId, conta.id);
+    } catch (err) {
+      const msg = err instanceof BadRequestException ? err.message : 'CONTA_INTER_INDISPONIVEL';
+      const out = [];
+      for (const t of titulos) {
+        if (t.formaPrevista === FormaPagamento.PIX) {
+          await this.cobrancas.registrarFalhaEmissaoCobv(empresaId, t.id, null, msg);
+        }
+        out.push({ titulo_id: t.id, reutilizada: false, erro: msg });
+      }
+      return out;
+    }
+  }
+
+  private mapResposta(
+    acordo: CobrancaAcordo,
+    titulos: TituloReceber[],
+    idempotente: boolean,
+    emissoes_pix: unknown[] = [],
+  ) {
     return {
       idempotente,
       acordo: {
@@ -182,6 +219,7 @@ export class IntegracaoCobrancaService {
         valor_recebido: Number(t.valorRecebido),
         saldo: Number(t.valorOriginal) - Number(t.valorRecebido),
       })),
+      emissoes_pix,
     };
   }
 }

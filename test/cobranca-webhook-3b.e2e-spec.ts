@@ -41,23 +41,35 @@ describe('Fase 3B — cobrança, webhook e baixa automática (e2e)', () => {
     ({ token, empresaId } = await login(app, E2E_MASTER_EMAIL, E2E_MASTER_SENHA));
     catReceita = await getCategoriaGlobal(dataSource, '1.01');
 
-    const criar = await request(app.getHttpServer())
-      .post('/v1/contas-bancarias')
-      .set(authHeaders(token, empresaId))
-      .send({
-        apelido: 'Inter cobrança E2E',
-        banco_codigo: '077',
-        agencia: '0001',
-        conta: '77701',
-        provedor: 'INTER',
-        credencial_ref: 'e2e',
-      });
-    contaId = criar.body.id;
+    const existentes = await dataSource.query(
+      `SELECT id FROM contas_bancarias WHERE empresa_id = $1 AND provedor = 'INTER' LIMIT 1`,
+      [empresaId],
+    );
+    if (existentes.length) {
+      contaId = existentes[0].id;
+    } else {
+      const criar = await request(app.getHttpServer())
+        .post('/v1/contas-bancarias')
+        .set(authHeaders(token, empresaId))
+        .send({
+          apelido: 'Inter cobrança E2E',
+          banco_codigo: '077',
+          agencia: '0001',
+          conta: '77702',
+          provedor: 'INTER',
+          credencial_ref: 'e2e',
+        });
+      contaId = criar.body.id;
+    }
 
     await request(app.getHttpServer())
       .post(`/v1/contas-bancarias/${contaId}/tarifas-cobranca`)
       .set(authHeaders(token, empresaId))
       .send({ forma: 'PIX', valor_tarifa: 3.5 });
+    await request(app.getHttpServer())
+      .post(`/v1/contas-bancarias/${contaId}/tarifas-cobranca`)
+      .set(authHeaders(token, empresaId))
+      .send({ forma: 'BOLETO', valor_tarifa: 3.5 });
   });
 
   afterAll(async () => {
@@ -110,11 +122,15 @@ describe('Fase 3B — cobrança, webhook e baixa automática (e2e)', () => {
     expect(titulo[0].status).toBe('PAGO');
     expect(titulo[0].valor_recebido).toBeCloseTo(200, 2);
 
+    const [{ id: baixaId }] = await dataSource.query(
+      `SELECT id FROM baixas WHERE titulo_receber_id = $1 AND estornada = false`,
+      [tituloId],
+    );
     const movs = await dataSource.query(
       `SELECT tipo_transacao, valor::float, origem FROM movimentos_bancarios
-       WHERE conta_bancaria_id = $1 AND tipo_transacao IN ('BAIXA','TARIFA')
+       WHERE id_externo LIKE $1 AND tipo_transacao IN ('BAIXA','TARIFA')
        ORDER BY tipo_transacao`,
-      [contaId],
+      [`baixa-${baixaId}-%`],
     );
     expect(movs.find((m: { tipo_transacao: string }) => m.tipo_transacao === 'BAIXA')?.valor).toBe(
       200,

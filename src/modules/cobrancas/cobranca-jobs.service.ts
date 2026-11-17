@@ -1,9 +1,12 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { CobrancaBoleto } from '../../database/entities/cobranca-boleto.entity';
-import { StatusCobranca } from '../../database/enums';
+import { ModalidadeCobranca, StatusCobranca } from '../../database/enums';
+import { InterCobrancaHttpService } from '../banco/inter/inter-cobranca-http.service';
+import { InterPixCobvHttpService } from '../banco/inter/inter-pix-cobv-http.service';
+import { CobrancasService } from './cobrancas.service';
 import { CobrancaVerificacaoService } from './cobranca-verificacao.service';
 import { WebhooksInterService } from '../webhooks/webhooks-inter.service';
 
@@ -15,8 +18,11 @@ export class CobrancaJobsService implements OnModuleInit {
   constructor(
     private config: ConfigService,
     private verificacao: CobrancaVerificacaoService,
+    private cobrancasService: CobrancasService,
     private webhooks: WebhooksInterService,
-    @InjectRepository(CobrancaBoleto) private cobrancas: Repository<CobrancaBoleto>,
+    private interCobranca: InterCobrancaHttpService,
+    private interPixCobv: InterPixCobvHttpService,
+    @InjectRepository(CobrancaBoleto) private cobrancaRepo: Repository<CobrancaBoleto>,
   ) {}
 
   onModuleInit() {
@@ -28,17 +34,37 @@ export class CobrancaJobsService implements OnModuleInit {
 
   async executarCiclo() {
     await this.webhooks.reprocessarPendentes();
+    await this.cobrancasService.processarEmissaoPendentes();
     await this.consultarCobrancasAbertas();
   }
 
+  async reemitirEmissaoPendentes(limit = 30) {
+    return this.cobrancasService.processarEmissaoPendentes(limit);
+  }
+
   private async consultarCobrancasAbertas() {
-    const abertas = await this.cobrancas.find({
-      where: [{ status: StatusCobranca.EMITIDA }, { status: StatusCobranca.REGISTRADA }],
+    const abertas = await this.cobrancaRepo.find({
+      where: {
+        status: In([StatusCobranca.EMITIDA, StatusCobranca.REGISTRADA]),
+      },
       take: 50,
     });
     for (const cb of abertas) {
       if (!cb.idExterno) continue;
-      await this.verificacao.verificarCobrancaPorCodigo(cb.idExterno);
+      if (cb.modalidade === ModalidadeCobranca.PIX_COBV) {
+        await this.verificacao.verificarCobvPorTxid(cb.txid ?? cb.idExterno);
+      } else {
+        await this.verificacao.verificarCobrancaPorCodigo(cb.idExterno);
+      }
+    }
+
+    if (this.config.get<string>('INTER_USE_MOCK') === 'true') {
+      for (const txid of this.interPixCobv.listarCobvMockEmAberto()) {
+        await this.verificacao.verificarCobvPorTxid(txid);
+      }
+      for (const codigo of this.interCobranca.listarCobrancasMockEmAberto()) {
+        await this.verificacao.verificarCobrancaPorCodigo(codigo);
+      }
     }
   }
 }
