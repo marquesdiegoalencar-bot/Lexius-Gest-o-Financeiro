@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CobrancaBoleto } from '../../database/entities/cobranca-boleto.entity';
+import { CobrancaEmissaoPendente } from '../../database/entities/cobranca-emissao-pendente.entity';
 import { ContaBancaria } from '../../database/entities/conta-bancaria.entity';
 import { Pessoa } from '../../database/entities/pessoa.entity';
 import { TituloReceber } from '../../database/entities/titulo-receber.entity';
@@ -18,7 +19,14 @@ import { CobrancasService } from './cobrancas.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([CobrancaBoleto, TituloReceber, ContaBancaria, Pessoa, WebhookEvento]),
+    TypeOrmModule.forFeature([
+      CobrancaBoleto,
+      CobrancaEmissaoPendente,
+      TituloReceber,
+      ContaBancaria,
+      Pessoa,
+      WebhookEvento,
+    ]),
     BancoModule,
     BaixasModule,
     TarifasCobrancaModule,
@@ -31,6 +39,6 @@ import { CobrancasService } from './cobrancas.service';
     WebhooksInterService,
     InterWebhookAuthGuard,
   ],
-  exports: [CobrancasService, CobrancaVerificacaoService],
+  exports: [CobrancasService, CobrancaVerificacaoService, CobrancaJobsService],
 })
 export class CobrancasModule {}

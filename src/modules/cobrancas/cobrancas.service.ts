@@ -1,11 +1,12 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { gerarTxidCobv } from '../../common/utils/cobv-txid';
 import { soDigitos } from '../../common/utils/documento';
 import { fromMoney } from '../../common/utils/money';
 import { CobrancaBoleto } from '../../database/entities/cobranca-boleto.entity';
+import { CobrancaEmissaoPendente } from '../../database/entities/cobranca-emissao-pendente.entity';
 import { ContaBancaria } from '../../database/entities/conta-bancaria.entity';
 import { Pessoa } from '../../database/entities/pessoa.entity';
 import { TituloReceber } from '../../database/entities/titulo-receber.entity';
@@ -32,6 +33,8 @@ export class CobrancasService {
     private interCobranca: InterCobrancaHttpService,
     private interPixCobv: InterPixCobvHttpService,
     @InjectRepository(CobrancaBoleto) private cobrancas: Repository<CobrancaBoleto>,
+    @InjectRepository(CobrancaEmissaoPendente)
+    private emissaoPendentes: Repository<CobrancaEmissaoPendente>,
     @InjectRepository(TituloReceber) private titulos: Repository<TituloReceber>,
     @InjectRepository(ContaBancaria) private contas: Repository<ContaBancaria>,
     @InjectRepository(Pessoa) private pessoas: Repository<Pessoa>,
@@ -142,6 +145,7 @@ export class CobrancasService {
       },
     });
     if (ativa?.idExterno && !opcoes?.reemitir) {
+      await this.resolverEmissaoPendente(tituloId, ModalidadeCobranca.PIX_COBV);
       return { cobranca: ativa, reutilizada: true };
     }
 
@@ -192,6 +196,7 @@ export class CobrancasService {
       }),
     );
 
+    await this.resolverEmissaoPendente(titulo.id, ModalidadeCobranca.PIX_COBV);
     return { cobranca, reutilizada: false, txid };
   }
 
@@ -222,10 +227,99 @@ export class CobrancasService {
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'ERRO_EMISSAO';
         this.logger.warn(`Emissão cobv titulo ${titulo.id}: ${msg}`);
+        await this.registrarEmissaoPendente({
+          empresaId,
+          tituloReceberId: titulo.id,
+          contaBancariaId,
+          modalidade: ModalidadeCobranca.PIX_COBV,
+          erro: msg,
+        });
         emissoes.push({ titulo_id: titulo.id, reutilizada: false, erro: msg });
       }
     }
     return emissoes;
+  }
+
+  async processarEmissaoPendentes(limit = 30): Promise<{ processados: number; resolvidos: number }> {
+    const pendentes = await this.emissaoPendentes.find({
+      where: { resolvidaEm: IsNull() },
+      take: limit,
+      order: { criadaEm: 'ASC' },
+    });
+    let resolvidos = 0;
+    for (const p of pendentes) {
+      p.tentativas += 1;
+      try {
+        let contaId = p.contaBancariaId;
+        if (!contaId) {
+          const conta = await this.resolverContaInterCobranca(p.empresaId);
+          contaId = conta.id;
+          p.contaBancariaId = conta.id;
+        }
+        await this.emitirPixCobvTitulo(p.tituloReceberId, p.empresaId, contaId);
+        p.resolvidaEm = new Date();
+        resolvidos += 1;
+      } catch (err) {
+        p.ultimoErro = err instanceof Error ? err.message : 'ERRO_REEMISSAO';
+      }
+      await this.emissaoPendentes.save(p);
+    }
+    return { processados: pendentes.length, resolvidos };
+  }
+
+  async registrarFalhaEmissaoCobv(
+    empresaId: string,
+    tituloReceberId: string,
+    contaBancariaId: string | null,
+    erro: string,
+  ) {
+    await this.registrarEmissaoPendente({
+      empresaId,
+      tituloReceberId,
+      contaBancariaId,
+      modalidade: ModalidadeCobranca.PIX_COBV,
+      erro,
+    });
+  }
+
+  private async registrarEmissaoPendente(params: {
+    empresaId: string;
+    tituloReceberId: string;
+    contaBancariaId: string | null;
+    modalidade: ModalidadeCobranca;
+    erro: string;
+  }) {
+    const existente = await this.emissaoPendentes.findOne({
+      where: {
+        tituloReceberId: params.tituloReceberId,
+        modalidade: params.modalidade,
+        resolvidaEm: IsNull(),
+      },
+    });
+    if (existente) {
+      existente.ultimoErro = params.erro;
+      existente.tentativas += 1;
+      if (params.contaBancariaId) existente.contaBancariaId = params.contaBancariaId;
+      await this.emissaoPendentes.save(existente);
+      return;
+    }
+    await this.emissaoPendentes.save(
+      this.emissaoPendentes.create({
+        empresaId: params.empresaId,
+        tituloReceberId: params.tituloReceberId,
+        contaBancariaId: params.contaBancariaId,
+        modalidade: params.modalidade,
+        ultimoErro: params.erro,
+        tentativas: 1,
+      }),
+    );
+  }
+
+  private async resolverEmissaoPendente(tituloReceberId: string, modalidade: ModalidadeCobranca) {
+    await this.emissaoPendentes.update(
+      { tituloReceberId, modalidade, resolvidaEm: IsNull() },
+      { resolvidaEm: new Date() },
+    );
   }
 
   async resolverContaInterCobranca(empresaId: string, contaId?: string): Promise<ContaBancaria> {

@@ -8,6 +8,7 @@ import { Categoria } from './entities/categoria.entity';
 import { CentroCusto } from './entities/centro-custo.entity';
 import { CobrancaAcordo } from './entities/cobranca-acordo.entity';
 import { CobrancaBoleto } from './entities/cobranca-boleto.entity';
+import { CobrancaEmissaoPendente } from './entities/cobranca-emissao-pendente.entity';
 import { ContaTarifaCobranca } from './entities/conta-tarifa-cobranca.entity';
 import { WebhookEvento } from './entities/webhook-evento.entity';
 import { ContaBancaria } from './entities/conta-bancaria.entity';
@@ -39,6 +40,7 @@ const entities = [
   Auditoria,
   OperacaoIntergrupo,
   CobrancaBoleto,
+  CobrancaEmissaoPendente,
   WebhookEvento,
   ContaTarifaCobranca,
 ];

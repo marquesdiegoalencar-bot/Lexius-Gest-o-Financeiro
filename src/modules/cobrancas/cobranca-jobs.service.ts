@@ -6,6 +6,7 @@ import { CobrancaBoleto } from '../../database/entities/cobranca-boleto.entity';
 import { ModalidadeCobranca, StatusCobranca } from '../../database/enums';
 import { InterCobrancaHttpService } from '../banco/inter/inter-cobranca-http.service';
 import { InterPixCobvHttpService } from '../banco/inter/inter-pix-cobv-http.service';
+import { CobrancasService } from './cobrancas.service';
 import { CobrancaVerificacaoService } from './cobranca-verificacao.service';
 import { WebhooksInterService } from '../webhooks/webhooks-inter.service';
 
@@ -17,10 +18,11 @@ export class CobrancaJobsService implements OnModuleInit {
   constructor(
     private config: ConfigService,
     private verificacao: CobrancaVerificacaoService,
+    private cobrancasService: CobrancasService,
     private webhooks: WebhooksInterService,
     private interCobranca: InterCobrancaHttpService,
     private interPixCobv: InterPixCobvHttpService,
-    @InjectRepository(CobrancaBoleto) private cobrancas: Repository<CobrancaBoleto>,
+    @InjectRepository(CobrancaBoleto) private cobrancaRepo: Repository<CobrancaBoleto>,
   ) {}
 
   onModuleInit() {
@@ -32,11 +34,16 @@ export class CobrancaJobsService implements OnModuleInit {
 
   async executarCiclo() {
     await this.webhooks.reprocessarPendentes();
+    await this.cobrancasService.processarEmissaoPendentes();
     await this.consultarCobrancasAbertas();
   }
 
+  async reemitirEmissaoPendentes(limit = 30) {
+    return this.cobrancasService.processarEmissaoPendentes(limit);
+  }
+
   private async consultarCobrancasAbertas() {
-    const abertas = await this.cobrancas.find({
+    const abertas = await this.cobrancaRepo.find({
       where: {
         status: In([StatusCobranca.EMITIDA, StatusCobranca.REGISTRADA]),
       },

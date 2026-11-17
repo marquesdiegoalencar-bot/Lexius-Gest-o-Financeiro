@@ -182,7 +182,14 @@ export class IntegracaoCobrancaService {
       return this.cobrancas.emitirCobvParaTitulos(titulos, empresaId, conta.id);
     } catch (err) {
       const msg = err instanceof BadRequestException ? err.message : 'CONTA_INTER_INDISPONIVEL';
-      return titulos.map((t) => ({ titulo_id: t.id, reutilizada: false, erro: msg }));
+      const out = [];
+      for (const t of titulos) {
+        if (t.formaPrevista === FormaPagamento.PIX) {
+          await this.cobrancas.registrarFalhaEmissaoCobv(empresaId, t.id, null, msg);
+        }
+        out.push({ titulo_id: t.id, reutilizada: false, erro: msg });
+      }
+      return out;
     }
   }
 

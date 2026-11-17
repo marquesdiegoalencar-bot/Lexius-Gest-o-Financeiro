@@ -29,6 +29,8 @@ type MockCobv = {
 export class InterPixCobvHttpService {
   private readonly logger = new Logger(InterPixCobvHttpService.name);
   private readonly mockStore = new Map<string, MockCobv>();
+  /** Contador de falhas simuladas na emissão (somente mock / testes). */
+  private mockEmitirFalhasRestantes = 0;
 
   constructor(
     private config: ConfigService,
@@ -69,6 +71,11 @@ export class InterPixCobvHttpService {
     return { token, material };
   }
 
+  simularFalhasEmissaoMock(quantidade: number): void {
+    if (!this.mockMode()) return;
+    this.mockEmitirFalhasRestantes = Math.max(0, quantidade);
+  }
+
   async criarCobv(
     credencialRef: string,
     contaCorrente: string | null,
@@ -76,6 +83,10 @@ export class InterPixCobvHttpService {
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
     if (this.mockMode()) {
+      if (this.mockEmitirFalhasRestantes > 0) {
+        this.mockEmitirFalhasRestantes -= 1;
+        throw new Error('MOCK_FALHA_EMISSAO_COBRANCA');
+      }
       const cal = (body.calendario ?? {}) as Record<string, unknown>;
       const valor = (body.valor ?? {}) as Record<string, unknown>;
       const venc = String(cal.dataDeVencimento ?? '');
