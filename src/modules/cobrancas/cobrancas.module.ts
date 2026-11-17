@@ -9,6 +9,7 @@ import { WebhookEvento } from '../../database/entities/webhook-evento.entity';
 import { BancoModule } from '../banco/banco.module';
 import { BaixasModule } from '../baixas/baixas.module';
 import { TarifasCobrancaModule } from '../tarifas-cobranca/tarifas-cobranca.module';
+import { IntegracaoCobrancaRetornoModule } from '../integracao-cobranca-retorno/integracao-cobranca-retorno.module';
 import { InterWebhookAuthGuard } from '../webhooks/inter-webhook-auth.guard';
 import { WebhooksInterController } from '../webhooks/webhooks-inter.controller';
 import { WebhooksInterService } from '../webhooks/webhooks-inter.service';
@@ -30,6 +31,7 @@ import { CobrancasService } from './cobrancas.service';
     BancoModule,
     BaixasModule,
     TarifasCobrancaModule,
+    IntegracaoCobrancaRetornoModule,
   ],
   controllers: [CobrancasController, WebhooksInterController],
   providers: [

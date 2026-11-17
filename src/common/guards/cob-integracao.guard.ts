@@ -5,8 +5,9 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHmac, timingSafeEqual } from 'crypto';
-import { Request } from 'express';
+import { timingSafeEqual } from 'crypto';
+import type { Request } from 'express';
+import { cobVerificarAssinatura } from '../crypto/cob-hmac';
 
 @Injectable()
 export class CobIntegracaoGuard implements CanActivate {
@@ -40,11 +41,17 @@ export class CobIntegracaoGuard implements CanActivate {
       throw new UnauthorizedException('Corpo da requisição indisponível para HMAC');
     }
 
-    const digest = createHmac('sha256', hmacSecret).update(rawBody).digest('hex');
-    const assinaturaBuf = Buffer.from(assinatura, 'utf8');
-    const digestBuf = Buffer.from(digest, 'utf8');
-    if (assinaturaBuf.length !== digestBuf.length || !timingSafeEqual(assinaturaBuf, digestBuf)) {
-      throw new UnauthorizedException('Assinatura HMAC inválida');
+    const tsHeader = req.headers['x-timestamp'];
+    const maxSkew = Number(this.config.get<string>('COB_INTEGRACAO_HMAC_MAX_SKEW_SECONDS') ?? 300);
+    const verificacao = cobVerificarAssinatura({
+      secret: hmacSecret,
+      rawBody: rawBody.toString('utf8'),
+      assinatura,
+      timestampHeader: typeof tsHeader === 'string' ? tsHeader : null,
+      maxSkewSec: maxSkew,
+    });
+    if (!verificacao.ok) {
+      throw new UnauthorizedException(verificacao.motivo);
     }
 
     return true;

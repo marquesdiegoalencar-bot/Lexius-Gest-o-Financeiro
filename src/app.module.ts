@@ -13,6 +13,7 @@ import { CentrosCustoModule } from './modules/centros-custo/centros-custo.module
 import { ContasBancariasModule } from './modules/contas-bancarias/contas-bancarias.module';
 import { EmpresasModule } from './modules/empresas/empresas.module';
 import { IntegracaoCobrancaModule } from './modules/integracao-cobranca/integracao-cobranca.module';
+import { IntegracaoCobrancaRetornoModule } from './modules/integracao-cobranca-retorno/integracao-cobranca-retorno.module';
 import { IntergrupoModule } from './modules/intergrupo/intergrupo.module';
 import { PessoasModule } from './modules/pessoas/pessoas.module';
 import { RecorrenciasModule } from './modules/recorrencias/recorrencias.module';
@@ -38,6 +39,7 @@ import { UsuariosModule } from './modules/usuarios/usuarios.module';
     CentrosCustoModule,
     ContasBancariasModule,
     IntegracaoCobrancaModule,
+    IntegracaoCobrancaRetornoModule,
     CobrancasModule,
     TitulosReceberModule,
     TitulosPagarModule,

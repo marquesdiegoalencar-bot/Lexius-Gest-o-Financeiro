@@ -1,10 +1,33 @@
-import { createHmac } from 'crypto';
+import { cobAssinarCorpoLegado, cobAssinarMensagem, cobVerificarAssinatura } from '../src/common/crypto/cob-hmac';
 
 export const E2E_COB_API_KEY = process.env.COB_INTEGRACAO_API_KEY ?? 'e2e-cob-api-key';
 export const E2E_HMAC_SECRET = process.env.COB_INTEGRACAO_HMAC_SECRET ?? 'e2e-hmac-secret';
 
+/** Assinatura legada (somente corpo) — compatível com testes existentes. */
 export function signCobBody(rawBody: string): string {
-  return createHmac('sha256', E2E_HMAC_SECRET).update(rawBody).digest('hex');
+  return cobAssinarCorpoLegado(E2E_HMAC_SECRET, rawBody);
+}
+
+export function signCobBodyComTimestamp(rawBody: string, timestampUnix?: number) {
+  const ts = String(timestampUnix ?? Math.floor(Date.now() / 1000));
+  return {
+    signature: cobAssinarMensagem(E2E_HMAC_SECRET, ts, rawBody),
+    timestamp: ts,
+  };
+}
+
+export function verifyCobRetornoBody(
+  rawBody: string,
+  assinatura: string,
+  timestamp: string,
+): boolean {
+  return cobVerificarAssinatura({
+    secret: process.env.COB_RETORNO_HMAC_SECRET ?? E2E_HMAC_SECRET,
+    rawBody,
+    assinatura,
+    timestampHeader: timestamp,
+    maxSkewSec: 300,
+  }).ok;
 }
 
 export type AcordoPayload = {

@@ -61,6 +61,12 @@ export enum OrigemTitulo {
   INTERGRUPO = 'INTERGRUPO',
 }
 
+export enum StatusCobRetorno {
+  PENDENTE = 'PENDENTE',
+  ENVIADO = 'ENVIADO',
+  FALHOU = 'FALHOU',
+}
+
 export enum StatusTitulo {
   ABERTO = 'ABERTO',
   PARCIAL = 'PARCIAL',

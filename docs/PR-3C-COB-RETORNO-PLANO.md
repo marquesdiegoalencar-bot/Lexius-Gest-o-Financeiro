@@ -7,9 +7,11 @@
 
 1. Baixa no Financeiro é **irreversível** por falha de envio ao COB.
 2. Parcela só é considerada “comunicada ao COB” após **HTTP 2xx** + registro em `cob_integracao_eventos.enviado_em`.
-3. Retentativa com backoff (job + mesmo intervalo `COBRANCA_POLL_INTERVAL_MS` ou `COB_RETORNO_POLL_MS`).
-4. Idempotência: um evento por `(tipo, cobranca_parcela_id, baixa_id)`; reenvio com mesmo `evento_id`.
-5. Assinatura espelha a integração entrada: **HMAC-SHA256** do corpo JSON bruto.
+3. Retentativa até `COB_RETORNO_MAX_TENTATIVAS`; após isso status `FALHOU` (MASTER lista e reenvia).
+4. Idempotência por `idempotency_key` (ex. `{baixa_id}:titulo.baixado`).
+5. Assinatura v2: **HMAC-SHA256** sobre `X-Timestamp` + corpo; janela 5 min. Entrada COB aceita legado (só corpo).
+6. `acordo.atualizado` em **toda** baixa e todo estorno, com todas as parcelas; ordem por acordo.
+7. Aviso `titulo.estornado` após estorno MASTER.
 
 ## Variáveis de ambiente
 
@@ -25,7 +27,7 @@
 | Coluna | Descrição |
 |--------|-----------|
 | `id` | UUID (`evento_id` no payload) |
-| `tipo_evento` | `titulo.baixado` \| `acordo.atualizado` |
+| `tipo_evento` | `titulo.baixado` \| `titulo.estornado` \| `acordo.atualizado` |
 | `baixa_id` | FK baixas |
 | `titulo_receber_id` | FK |
 | `cobranca_parcela_id` | Texto COB |
@@ -39,7 +41,8 @@
 Após `BaixasService` concluir baixa de título com `origem IN (COBRANCA_ACORDO, COBRANCA_BOLETO)` e `cobranca_parcela_id` preenchido:
 
 1. Enfileirar `titulo.baixado` (sempre).
-2. Se todas as parcelas do acordo `PAGO` (ou saldo zero), enfileirar também `acordo.atualizado`.
+2. Enfileirar sempre `acordo.atualizado` com snapshot de todas as parcelas.
+3. Estorno MASTER → `titulo.estornado` + `acordo.atualizado`.
 
 Processamento assíncrono (`setImmediate` / job) — não bloquear resposta da baixa.
 
@@ -61,7 +64,10 @@ Headers:
 
 - `Content-Type: application/json`
 - `X-Api-Key: <COB_RETORNO_API_KEY>`
-- `X-Signature: hex(hmac_sha256(secret, raw_body))`
+- `X-Timestamp: unix` (v2)
+- `X-Signature: hex(hmac_sha256(secret, timestamp + '.' + raw_body))`
+
+Documentação completa: [CONTRATO-COB.md](./CONTRATO-COB.md).
 
 ### `titulo.baixado`
 
