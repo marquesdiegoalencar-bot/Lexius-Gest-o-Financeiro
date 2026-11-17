@@ -498,6 +498,7 @@ CREATE TABLE repasses (
     pagamento_id  UUID REFERENCES pagamentos_bancarios(id),
     data_repasse  DATE,
     observacao    TEXT,
+    rascunho_baixa_ids UUID[],
     criado_por    UUID REFERENCES usuarios(id),
     criado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
 );

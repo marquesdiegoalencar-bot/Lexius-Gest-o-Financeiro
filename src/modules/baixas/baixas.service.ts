@@ -379,7 +379,7 @@ export class BaixasService {
       throw new ForbiddenException('Somente MASTER pode estornar baixa');
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    const baixaEstornada = await this.dataSource.transaction(async (manager) => {
       const baixa = await manager.findOne(Baixa, {
         where: { id: baixaId, empresaId },
         lock: { mode: 'pessimistic_write' },
@@ -434,13 +434,12 @@ export class BaixasService {
         depois: { estornada: true, motivo: dto.motivo },
       });
 
-      const idEstornado = baixa.id;
-      setImmediate(() => {
-        if (baixa.tituloReceberId) {
-          this.cobRetorno.agendarAposEstornoBaixaReceber(idEstornado);
-        }
-      });
       return baixa;
     });
+
+    if (baixaEstornada.tituloReceberId) {
+      setImmediate(() => this.cobRetorno.agendarAposEstornoBaixaReceber(baixaEstornada.id));
+    }
+    return baixaEstornada;
   }
 }
