@@ -7,6 +7,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PapelGuard } from '../../common/guards/papel.guard';
 import { UsuarioEmpresa } from '../../database/entities/usuario-empresa.entity';
+import { SenhaResetToken } from '../../database/entities/senha-reset-token.entity';
 import { Usuario } from '../../database/entities/usuario.entity';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -15,7 +16,7 @@ import { JwtStrategy } from './jwt.strategy';
 @Global()
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Usuario, UsuarioEmpresa]),
+    TypeOrmModule.forFeature([Usuario, UsuarioEmpresa, SenhaResetToken]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],

@@ -26,12 +26,14 @@ import { Recorrencia } from './entities/recorrencia.entity';
 import { TituloPagar } from './entities/titulo-pagar.entity';
 import { TituloReceber } from './entities/titulo-receber.entity';
 import { UsuarioEmpresa } from './entities/usuario-empresa.entity';
+import { SenhaResetToken } from './entities/senha-reset-token.entity';
 import { Usuario } from './entities/usuario.entity';
 
 const entities = [
   Empresa,
   Usuario,
   UsuarioEmpresa,
+  SenhaResetToken,
   Pessoa,
   Categoria,
   CentroCusto,

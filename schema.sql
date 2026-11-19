@@ -60,6 +60,18 @@ CREATE TABLE usuario_empresa (
     PRIMARY KEY (usuario_id, empresa_id)
 );
 
+CREATE TABLE senha_reset_tokens (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    usuario_id    UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    token_hash    TEXT NOT NULL,
+    expira_em     TIMESTAMPTZ NOT NULL,
+    usado_em      TIMESTAMPTZ,
+    criado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_senha_reset_tokens_usuario ON senha_reset_tokens (usuario_id);
+CREATE INDEX idx_senha_reset_tokens_hash ON senha_reset_tokens (token_hash);
+
 -- ---------------------------------------------------------------------
 -- PESSOAS (clientes, fornecedores, credores, colaboradores, advogados)
 -- ---------------------------------------------------------------------

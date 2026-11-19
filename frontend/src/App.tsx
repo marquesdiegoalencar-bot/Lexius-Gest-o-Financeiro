@@ -2,7 +2,9 @@ import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import { AuthProvider } from '@/lib/auth';
 import { AuthGuard } from '@/components/auth-guard';
 import { AppLayout } from '@/components/layout/app-layout';
+import { EsqueciSenhaPage } from '@/pages/esqueci-senha-page';
 import { LoginPage } from '@/pages/login-page';
+import { RedefinirSenhaPage } from '@/pages/redefinir-senha-page';
 import { DashboardPage } from '@/pages/dashboard-page';
 import {
   BancosPage,
@@ -17,6 +19,8 @@ import { CentrosCustoPage } from '@/pages/centros-custo-page';
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  { path: '/login/esqueci-senha', element: <EsqueciSenhaPage /> },
+  { path: '/login/redefinir-senha', element: <RedefinirSenhaPage /> },
   {
     element: <AuthGuard />,
     children: [

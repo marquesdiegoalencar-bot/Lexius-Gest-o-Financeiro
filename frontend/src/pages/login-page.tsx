@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Wallet } from 'lucide-react';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -78,6 +78,11 @@ export function LoginPage() {
               </p>
             ) : null}
             {erro ? <p className="text-sm text-red-600">{erro}</p> : null}
+            <p className="text-right text-sm">
+              <Link to="/login/esqueci-senha" className="text-lexius-600 hover:underline">
+                Esqueci minha senha
+              </Link>
+            </p>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Entrando…' : 'Entrar'}
             </Button>
