@@ -22,6 +22,8 @@ Node.js + TypeScript (NestJS), PostgreSQL 15+, TypeORM.
 npm run db:migrate
 ```
 
+Em banco **já existente**, aplique somente os arquivos incrementais em `migrations/` (ver `docs/MIGRATIONS.md`); `db:migrate` reaplica `schema.sql` inteiro e falha se o banco já foi inicializado.
+
 3. (Opcional) dados iniciais de desenvolvimento:
 
 ```bash

@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { CentroCusto } from '../../database/entities/centro-custo.entity';
 import { TipoCentroCusto, TipoNoCentroCusto } from '../../database/enums';
 import { CreateCentroCustoDto } from './dto/create-centro-custo.dto';
@@ -15,7 +15,10 @@ const MAX_PROFUNDIDADE = 3;
 
 @Injectable()
 export class CentrosCustoService {
-  constructor(@InjectRepository(CentroCusto) private repo: Repository<CentroCusto>) {}
+  constructor(
+    @InjectRepository(CentroCusto) private repo: Repository<CentroCusto>,
+    private dataSource: DataSource,
+  ) {}
 
   list(empresaId: string, tipo?: TipoCentroCusto) {
     const where: { empresaId: string; tipo?: TipoCentroCusto } = { empresaId };
@@ -51,28 +54,61 @@ export class CentrosCustoService {
   }
 
   async create(empresaId: string, dto: CreateCentroCustoDto) {
-    await this.assertCodigoLivre(empresaId, dto.codigo, undefined);
     const tipoNo = dto.tipo_no ?? TipoNoCentroCusto.ANALITICO;
     const paiId = dto.pai_id ?? null;
     const tipo = dto.tipo ?? TipoCentroCusto.ENTRADA;
-    await this.validateNovoNo(empresaId, tipoNo, paiId, tipo);
-    return this.repo.save(
-      this.repo.create({
-        empresaId,
-        codigo: dto.codigo?.trim() || null,
-        nome: dto.nome.trim(),
-        descricao: dto.descricao?.trim() || null,
-        tipo,
-        tipoNo,
-        paiId,
-      }),
-    );
+
+    return this.dataSource.transaction(async (manager) => {
+      await this.assertCodigoLivre(manager, empresaId, dto.codigo, undefined);
+      await this.validateNovoNo(manager, empresaId, tipoNo, paiId, tipo);
+      return manager.save(
+        CentroCusto,
+        manager.create(CentroCusto, {
+          empresaId,
+          codigo: dto.codigo?.trim() || null,
+          nome: dto.nome.trim(),
+          descricao: dto.descricao?.trim() || null,
+          tipo,
+          tipoNo,
+          paiId,
+        }),
+      );
+    });
   }
 
   async update(id: string, empresaId: string, dto: UpdateCentroCustoDto) {
+    const needsLock =
+      dto.ativo !== undefined || dto.pai_id !== undefined || dto.tipo_no !== undefined;
+
+    if (needsLock) {
+      return this.dataSource.transaction((manager) => this.applyUpdate(manager, id, empresaId, dto));
+    }
+
     const c = await this.findOne(id, empresaId);
     if (dto.codigo !== undefined) {
-      await this.assertCodigoLivre(empresaId, dto.codigo, id);
+      await this.assertCodigoLivre(this.repo.manager, empresaId, dto.codigo, id);
+      c.codigo = dto.codigo?.trim() || null;
+    }
+    if (dto.nome !== undefined) c.nome = dto.nome.trim();
+    if (dto.descricao !== undefined) c.descricao = dto.descricao?.trim() || null;
+    if (dto.tipo !== undefined) c.tipo = dto.tipo;
+    return this.repo.save(c);
+  }
+
+  private async applyUpdate(
+    manager: EntityManager,
+    id: string,
+    empresaId: string,
+    dto: UpdateCentroCustoDto,
+  ) {
+    const c = await manager.findOne(CentroCusto, {
+      where: { id, empresaId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!c) throw new NotFoundException('Centro de custo não encontrado');
+
+    if (dto.codigo !== undefined) {
+      await this.assertCodigoLivre(manager, empresaId, dto.codigo, id);
       c.codigo = dto.codigo?.trim() || null;
     }
     if (dto.nome !== undefined) c.nome = dto.nome.trim();
@@ -83,14 +119,17 @@ export class CentrosCustoService {
     const paiIdFuturo = dto.pai_id !== undefined ? dto.pai_id ?? null : c.paiId;
 
     if (dto.pai_id !== undefined || dto.tipo_no !== undefined) {
-      await this.validateNoExistente(empresaId, id, tipoNoFuturo, paiIdFuturo, c.tipo);
+      if (paiIdFuturo) {
+        await this.lockCentro(manager, paiIdFuturo, empresaId);
+      }
+      await this.validateNoExistente(manager, empresaId, id, tipoNoFuturo, paiIdFuturo, c.tipo);
     }
 
     if (dto.ativo === false && c.ativo) {
-      await this.assertPodeInativar(c);
+      await this.assertPodeInativar(manager, c);
       c.ativo = false;
     } else if (dto.ativo === true && !c.ativo) {
-      await this.assertPodeReativar(empresaId, c, tipoNoFuturo, paiIdFuturo);
+      await this.assertPodeReativar(manager, empresaId, c, tipoNoFuturo, paiIdFuturo);
       c.ativo = true;
     } else if (dto.ativo !== undefined) {
       c.ativo = dto.ativo;
@@ -99,30 +138,42 @@ export class CentrosCustoService {
     if (dto.tipo_no !== undefined) c.tipoNo = tipoNoFuturo;
     if (dto.pai_id !== undefined) c.paiId = paiIdFuturo;
 
-    return this.repo.save(c);
+    return manager.save(CentroCusto, c);
   }
 
-  /** Novo vínculo financeiro: somente centro analítico ativo da mesma empresa. */
-  async assertVinculoFinanceiro(empresaId: string, centroCustoId: string) {
-    const rows: Array<{ id: string; tipo_no: string; ativo: boolean }> = await this.repo.manager.query(
-      `SELECT id, tipo_no::text, ativo
-       FROM centros_custo
-       WHERE id = $1 AND empresa_id = $2
-       FOR UPDATE`,
-      [centroCustoId, empresaId],
-    );
-    const c = rows[0];
+  /**
+   * Deve ser chamado dentro da mesma transação que persiste o título (FOR UPDATE até o commit).
+   */
+  async assertVinculoFinanceiroTx(
+    manager: EntityManager,
+    empresaId: string,
+    centroCustoId: string,
+  ): Promise<void> {
+    const c = await manager.findOne(CentroCusto, {
+      where: { id: centroCustoId, empresaId },
+      lock: { mode: 'pessimistic_write' },
+    });
     if (!c) {
       throw new NotFoundException('Centro de custo não encontrado');
     }
-    if (c.tipo_no !== TipoNoCentroCusto.ANALITICO || !c.ativo) {
+    if (c.tipoNo !== TipoNoCentroCusto.ANALITICO || !c.ativo) {
       throw new BadRequestException(
         'Somente centros de custo analíticos ativos podem receber novos vínculos financeiros',
       );
     }
   }
 
+  private async lockCentro(manager: EntityManager, id: string, empresaId: string): Promise<CentroCusto> {
+    const c = await manager.findOne(CentroCusto, {
+      where: { id, empresaId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!c) throw new NotFoundException('Centro de custo não encontrado');
+    return c;
+  }
+
   private async validateNovoNo(
+    manager: EntityManager,
     empresaId: string,
     tipoNo: TipoNoCentroCusto,
     paiId: string | null,
@@ -130,7 +181,7 @@ export class CentrosCustoService {
   ) {
     this.assertRaizPermitida(tipoNo, paiId);
     if (paiId) {
-      const pai = await this.findOne(paiId, empresaId);
+      const pai = await this.lockCentro(manager, paiId, empresaId);
       if (!pai.ativo) {
         throw new BadRequestException('O centro de custo pai deve estar ativo');
       }
@@ -138,8 +189,8 @@ export class CentrosCustoService {
         throw new BadRequestException('Centro de custo pai deve ter o mesmo tipo (entrada/saída)');
       }
       this.assertFilhoPermitido(pai.tipoNo, tipoNo);
-      await this.assertNotCycle('00000000-0000-4000-8000-000000000000', paiId);
-      const profundidadePai = await this.profundidadeNo(paiId, empresaId);
+      await this.assertNotCycle(manager, '00000000-0000-4000-8000-000000000000', paiId);
+      const profundidadePai = await this.profundidadeNo(manager, paiId, empresaId);
       if (profundidadePai + 1 > MAX_PROFUNDIDADE) {
         throw new BadRequestException(`Profundidade máxima da hierarquia é ${MAX_PROFUNDIDADE} níveis`);
       }
@@ -147,6 +198,7 @@ export class CentrosCustoService {
   }
 
   private async validateNoExistente(
+    manager: EntityManager,
     empresaId: string,
     id: string,
     tipoNo: TipoNoCentroCusto,
@@ -155,7 +207,7 @@ export class CentrosCustoService {
   ) {
     this.assertRaizPermitida(tipoNo, paiId);
     if (tipoNo === TipoNoCentroCusto.ANALITICO) {
-      const temFilhos = await this.repo.exist({ where: { paiId: id } });
+      const temFilhos = await manager.exists(CentroCusto, { where: { paiId: id } });
       if (temFilhos) {
         throw new BadRequestException('Centro analítico não pode ter filhos na hierarquia');
       }
@@ -164,14 +216,14 @@ export class CentrosCustoService {
       if (paiId === id) {
         throw new BadRequestException('Centro de custo não pode ser pai de si mesmo');
       }
-      const pai = await this.findOne(paiId, empresaId);
+      const pai = await this.lockCentro(manager, paiId, empresaId);
       if (pai.tipo !== tipoEntradaSaida) {
         throw new BadRequestException('Centro de custo pai deve ter o mesmo tipo (entrada/saída)');
       }
       this.assertFilhoPermitido(pai.tipoNo, tipoNo);
-      await this.assertNotCycle(id, paiId);
-      const profundidadePai = await this.profundidadeNo(paiId, empresaId);
-      const alturaSubarvore = await this.alturaSubarvore(id);
+      await this.assertNotCycle(manager, id, paiId);
+      const profundidadePai = await this.profundidadeNo(manager, paiId, empresaId);
+      const alturaSubarvore = await this.alturaSubarvore(manager, id);
       if (profundidadePai + alturaSubarvore > MAX_PROFUNDIDADE) {
         throw new BadRequestException(`Profundidade máxima da hierarquia é ${MAX_PROFUNDIDADE} níveis`);
       }
@@ -199,44 +251,49 @@ export class CentrosCustoService {
     }
   }
 
-  private async assertNotCycle(nodeId: string, newPaiId: string) {
+  private async assertNotCycle(manager: EntityManager, nodeId: string, newPaiId: string) {
     let current: string | null = newPaiId;
     while (current) {
       if (current === nodeId) {
         throw new BadRequestException('Hierarquia inválida: referência circular');
       }
-      const row = await this.repo.findOne({ where: { id: current }, select: { id: true, paiId: true } });
+      const row: Pick<CentroCusto, 'id' | 'paiId'> | null = await manager.findOne(CentroCusto, {
+        where: { id: current },
+        select: { id: true, paiId: true },
+      });
       if (!row) break;
       current = row.paiId;
     }
   }
 
-  private async profundidadeNo(id: string, empresaId: string): Promise<number> {
+  private async profundidadeNo(manager: EntityManager, id: string, empresaId: string): Promise<number> {
     let depth = 1;
-    let current = await this.findOne(id, empresaId);
+    let current = await manager.findOne(CentroCusto, { where: { id, empresaId } });
+    if (!current) throw new NotFoundException('Centro de custo não encontrado');
     while (current.paiId) {
       depth += 1;
-      current = await this.findOne(current.paiId, empresaId);
+      current = await manager.findOne(CentroCusto, { where: { id: current.paiId, empresaId } });
+      if (!current) throw new NotFoundException('Centro de custo não encontrado');
     }
     return depth;
   }
 
-  private async alturaSubarvore(id: string): Promise<number> {
-    const filhos = await this.repo.find({ where: { paiId: id }, select: { id: true } });
+  private async alturaSubarvore(manager: EntityManager, id: string): Promise<number> {
+    const filhos = await manager.find(CentroCusto, { where: { paiId: id }, select: { id: true } });
     if (filhos.length === 0) return 1;
     let maxChild = 0;
     for (const f of filhos) {
-      const h = await this.alturaSubarvore(f.id);
+      const h = await this.alturaSubarvore(manager, f.id);
       if (h > maxChild) maxChild = h;
     }
     return 1 + maxChild;
   }
 
-  private async assertPodeInativar(c: CentroCusto) {
+  private async assertPodeInativar(manager: EntityManager, c: CentroCusto) {
     if (c.tipoNo === TipoNoCentroCusto.ANALITICO) {
       return;
     }
-    const ativos = await this.hasActiveDescendant(c.id);
+    const ativos = await this.hasActiveDescendant(manager, c.id);
     if (ativos) {
       throw new BadRequestException(
         'Grupo ou subgrupo com descendentes ativos não pode ser inativado',
@@ -245,22 +302,23 @@ export class CentrosCustoService {
   }
 
   private async assertPodeReativar(
+    manager: EntityManager,
     empresaId: string,
     c: CentroCusto,
     tipoNo: TipoNoCentroCusto,
     paiId: string | null,
   ) {
-    await this.validateNoExistente(empresaId, c.id, tipoNo, paiId, c.tipo);
     if (paiId) {
-      const pai = await this.findOne(paiId, empresaId);
+      const pai = await this.lockCentro(manager, paiId, empresaId);
       if (!pai.ativo) {
         throw new BadRequestException('Reativação exige centro de custo pai ativo');
       }
     }
+    await this.validateNoExistente(manager, empresaId, c.id, tipoNo, paiId, c.tipo);
   }
 
-  private async hasActiveDescendant(id: string): Promise<boolean> {
-    const rows = await this.repo.query(
+  private async hasActiveDescendant(manager: EntityManager, id: string): Promise<boolean> {
+    const rows = await manager.query(
       `WITH RECURSIVE descendentes AS (
          SELECT id, ativo FROM centros_custo WHERE pai_id = $1
          UNION ALL
@@ -273,10 +331,15 @@ export class CentrosCustoService {
     return rows.length > 0;
   }
 
-  private async assertCodigoLivre(empresaId: string, codigo: string | undefined, ignoreId?: string) {
+  private async assertCodigoLivre(
+    manager: EntityManager,
+    empresaId: string,
+    codigo: string | undefined,
+    ignoreId?: string,
+  ) {
     const code = codigo?.trim();
     if (!code) return;
-    const dup = await this.repo.findOne({ where: { empresaId, codigo: code } });
+    const dup = await manager.findOne(CentroCusto, { where: { empresaId, codigo: code } });
     if (dup && dup.id !== ignoreId) {
       throw new ConflictException(`Código de centro de custo já em uso: ${code}`);
     }

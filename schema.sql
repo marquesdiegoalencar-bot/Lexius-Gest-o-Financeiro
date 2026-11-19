@@ -177,10 +177,12 @@ CREATE TABLE centros_custo (
     nome          TEXT NOT NULL,
     descricao     TEXT,
     tipo          tipo_centro_custo NOT NULL DEFAULT 'ENTRADA',
-    pai_id        UUID REFERENCES centros_custo(id),
+    pai_id        UUID,
     tipo_no       tipo_no_centro_custo NOT NULL,
     ativo         BOOLEAN NOT NULL DEFAULT TRUE,
-    UNIQUE (empresa_id, codigo)
+    UNIQUE (empresa_id, codigo),
+    UNIQUE (empresa_id, id),
+    FOREIGN KEY (empresa_id, pai_id) REFERENCES centros_custo (empresa_id, id)
 );
 
 -- ---------------------------------------------------------------------

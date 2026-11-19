@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AuditoriaService } from '../../common/auditoria/auditoria.service';
 import { toMoneyString } from '../../common/utils/money';
 import { TituloReceber } from '../../database/entities/titulo-receber.entity';
@@ -16,6 +16,7 @@ export class TitulosReceberService {
   constructor(
     private auditoria: AuditoriaService,
     private centrosCusto: CentrosCustoService,
+    private dataSource: DataSource,
     @InjectRepository(TituloReceber) private repo: Repository<TituloReceber>,
   ) {}
 
@@ -41,11 +42,35 @@ export class TitulosReceberService {
   }
 
   async createManual(empresaId: string, usuarioId: string, dto: CreateTituloReceberDto) {
+    const titulo = dto.centro_custo_id
+      ? await this.dataSource.transaction((manager) =>
+          this.criarTituloReceberManual(manager, empresaId, usuarioId, dto),
+        )
+      : await this.criarTituloReceberManual(this.repo.manager, empresaId, usuarioId, dto);
+
+    await this.auditoria.registrar({
+      empresaId,
+      usuarioId,
+      entidade: 'titulo_receber',
+      entidadeId: titulo.id,
+      acao: 'CRIAR',
+      depois: { id: titulo.id, valor: titulo.valorOriginal },
+    });
+    return titulo;
+  }
+
+  private async criarTituloReceberManual(
+    manager: EntityManager,
+    empresaId: string,
+    usuarioId: string,
+    dto: CreateTituloReceberDto,
+  ) {
     if (dto.centro_custo_id) {
-      await this.centrosCusto.assertVinculoFinanceiro(empresaId, dto.centro_custo_id);
+      await this.centrosCusto.assertVinculoFinanceiroTx(manager, empresaId, dto.centro_custo_id);
     }
-    const titulo = await this.repo.save(
-      this.repo.create({
+    return manager.save(
+      TituloReceber,
+      manager.create(TituloReceber, {
         empresaId,
         descricao: dto.descricao,
         pessoaId: dto.pessoa_id ?? null,
@@ -62,28 +87,34 @@ export class TitulosReceberService {
         criadoPor: usuarioId,
       }),
     );
-    await this.auditoria.registrar({
-      empresaId,
-      usuarioId,
-      entidade: 'titulo_receber',
-      entidadeId: titulo.id,
-      acao: 'CRIAR',
-      depois: { id: titulo.id, valor: titulo.valorOriginal },
-    });
-    return titulo;
   }
 
   async parcelar(empresaId: string, usuarioId: string, dto: ParcelarTituloReceberDto) {
+    const resultado = dto.centro_custo_id
+      ? await this.dataSource.transaction((manager) =>
+          this.parcelarEmTransacao(manager, empresaId, usuarioId, dto),
+        )
+      : await this.parcelarEmTransacao(this.repo.manager, empresaId, usuarioId, dto);
+    return resultado;
+  }
+
+  private async parcelarEmTransacao(
+    manager: EntityManager,
+    empresaId: string,
+    usuarioId: string,
+    dto: ParcelarTituloReceberDto,
+  ) {
     if (dto.centro_custo_id) {
-      await this.centrosCusto.assertVinculoFinanceiro(empresaId, dto.centro_custo_id);
+      await this.centrosCusto.assertVinculoFinanceiroTx(manager, empresaId, dto.centro_custo_id);
     }
     const grupoId = randomUUID();
     const total = dto.parcelas.length;
     const titulos: TituloReceber[] = [];
     for (let i = 0; i < dto.parcelas.length; i++) {
       const p = dto.parcelas[i];
-      const titulo = await this.repo.save(
-        this.repo.create({
+      const titulo = await manager.save(
+        TituloReceber,
+        manager.create(TituloReceber, {
           empresaId,
           descricao: p.descricao,
           pessoaId: dto.pessoa_id ?? null,

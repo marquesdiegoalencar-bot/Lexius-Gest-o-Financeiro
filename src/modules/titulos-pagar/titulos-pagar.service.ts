@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AuditoriaService } from '../../common/auditoria/auditoria.service';
 import { toMoneyString } from '../../common/utils/money';
 import { TituloPagar } from '../../database/entities/titulo-pagar.entity';
@@ -16,6 +16,7 @@ export class TitulosPagarService {
   constructor(
     private auditoria: AuditoriaService,
     private centrosCusto: CentrosCustoService,
+    private dataSource: DataSource,
     @InjectRepository(TituloPagar) private repo: Repository<TituloPagar>,
   ) {}
 
@@ -41,62 +42,27 @@ export class TitulosPagarService {
   }
 
   async create(empresaId: string, usuarioId: string, dto: CreateTituloPagarDto) {
-    if (dto.centro_custo_id) {
-      await this.centrosCusto.assertVinculoFinanceiro(empresaId, dto.centro_custo_id);
-    }
+    const comCentro = !!dto.centro_custo_id;
+
     if (dto.parcelas?.length) {
-      const grupoId = randomUUID();
-      const total = dto.parcelas.length;
-      const titulos: TituloPagar[] = [];
-      for (let i = 0; i < dto.parcelas.length; i++) {
-        const p = dto.parcelas[i];
-        const titulo = await this.repo.save(
-          this.repo.create({
-            empresaId,
-            descricao: p.descricao,
-            fornecedorId: dto.fornecedor_id ?? null,
-            categoriaId: dto.categoria_id,
-            centroCustoId: dto.centro_custo_id ?? null,
-            contaBancariaId: dto.conta_bancaria_id ?? null,
-            recorrenciaId: dto.recorrencia_id ?? null,
-            origem: dto.recorrencia_id ? OrigemTitulo.RECORRENCIA : OrigemTitulo.MANUAL,
-            grupoParcelasId: grupoId,
-            parcelaNumero: i + 1,
-            parcelaTotal: total,
-            valorOriginal: toMoneyString(p.valor_original),
-            dataVencimento: p.data_vencimento,
-            formaPrevista: dto.forma_prevista ?? null,
-            observacao: dto.observacao ?? null,
-            criadoPor: usuarioId,
-          }),
-        );
-        titulos.push(titulo);
-      }
-      return { grupo_parcelas_id: grupoId, titulos };
+      const resultado = comCentro
+        ? await this.dataSource.transaction((manager) =>
+            this.criarParcelado(manager, empresaId, usuarioId, dto),
+          )
+        : await this.criarParcelado(this.repo.manager, empresaId, usuarioId, dto);
+      return resultado;
     }
 
     if (!dto.descricao || dto.valor_original == null || !dto.data_vencimento) {
       throw new BadRequestException('descricao, valor_original e data_vencimento são obrigatórios');
     }
 
-    const titulo = await this.repo.save(
-      this.repo.create({
-        empresaId,
-        descricao: dto.descricao,
-        fornecedorId: dto.fornecedor_id ?? null,
-        categoriaId: dto.categoria_id,
-        centroCustoId: dto.centro_custo_id ?? null,
-        contaBancariaId: dto.conta_bancaria_id ?? null,
-        recorrenciaId: dto.recorrencia_id ?? null,
-        origem: dto.recorrencia_id ? OrigemTitulo.RECORRENCIA : OrigemTitulo.MANUAL,
-        valorOriginal: toMoneyString(dto.valor_original),
-        dataVencimento: dto.data_vencimento,
-        dataCompetencia: dto.data_competencia ?? null,
-        formaPrevista: dto.forma_prevista ?? null,
-        observacao: dto.observacao ?? null,
-        criadoPor: usuarioId,
-      }),
-    );
+    const titulo = comCentro
+      ? await this.dataSource.transaction((manager) =>
+          this.criarTituloPagarAvulso(manager, empresaId, usuarioId, dto),
+        )
+      : await this.criarTituloPagarAvulso(this.repo.manager, empresaId, usuarioId, dto);
+
     await this.auditoria.registrar({
       empresaId,
       usuarioId,
@@ -106,6 +72,76 @@ export class TitulosPagarService {
       depois: { id: titulo.id },
     });
     return titulo;
+  }
+
+  private async criarParcelado(
+    manager: EntityManager,
+    empresaId: string,
+    usuarioId: string,
+    dto: CreateTituloPagarDto,
+  ) {
+    if (dto.centro_custo_id) {
+      await this.centrosCusto.assertVinculoFinanceiroTx(manager, empresaId, dto.centro_custo_id);
+    }
+    const grupoId = randomUUID();
+    const total = dto.parcelas!.length;
+    const titulos: TituloPagar[] = [];
+    for (let i = 0; i < dto.parcelas!.length; i++) {
+      const p = dto.parcelas![i];
+      const titulo = await manager.save(
+        TituloPagar,
+        manager.create(TituloPagar, {
+          empresaId,
+          descricao: p.descricao,
+          fornecedorId: dto.fornecedor_id ?? null,
+          categoriaId: dto.categoria_id,
+          centroCustoId: dto.centro_custo_id ?? null,
+          contaBancariaId: dto.conta_bancaria_id ?? null,
+          recorrenciaId: dto.recorrencia_id ?? null,
+          origem: dto.recorrencia_id ? OrigemTitulo.RECORRENCIA : OrigemTitulo.MANUAL,
+          grupoParcelasId: grupoId,
+          parcelaNumero: i + 1,
+          parcelaTotal: total,
+          valorOriginal: toMoneyString(p.valor_original),
+          dataVencimento: p.data_vencimento,
+          formaPrevista: dto.forma_prevista ?? null,
+          observacao: dto.observacao ?? null,
+          criadoPor: usuarioId,
+        }),
+      );
+      titulos.push(titulo);
+    }
+    return { grupo_parcelas_id: grupoId, titulos };
+  }
+
+  private async criarTituloPagarAvulso(
+    manager: EntityManager,
+    empresaId: string,
+    usuarioId: string,
+    dto: CreateTituloPagarDto,
+  ) {
+    if (dto.centro_custo_id) {
+      await this.centrosCusto.assertVinculoFinanceiroTx(manager, empresaId, dto.centro_custo_id);
+    }
+    return manager.save(
+      TituloPagar,
+      manager.create(TituloPagar, {
+        empresaId,
+        descricao: dto.descricao!,
+        fornecedorId: dto.fornecedor_id ?? null,
+        categoriaId: dto.categoria_id,
+        centroCustoId: dto.centro_custo_id ?? null,
+        contaBancariaId: dto.conta_bancaria_id ?? null,
+        recorrenciaId: dto.recorrencia_id ?? null,
+        origem: dto.recorrencia_id ? OrigemTitulo.RECORRENCIA : OrigemTitulo.MANUAL,
+        valorOriginal: toMoneyString(dto.valor_original!),
+        dataVencimento: dto.data_vencimento!,
+        dataCompetencia: dto.data_competencia ?? null,
+        formaPrevista: dto.forma_prevista ?? null,
+        observacao: dto.observacao ?? null,
+        criadoPor: usuarioId,
+      }),
+    );
   }
 
   async aprovar(id: string, empresaId: string, usuarioId: string) {
