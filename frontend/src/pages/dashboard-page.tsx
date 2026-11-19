@@ -8,7 +8,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { AlertCircle, Banknote, TrendingDown, TrendingUp } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { AlertCircle, ArrowDownCircle, ArrowUpCircle, Banknote, Landmark, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useApi } from '@/hooks/use-api';
 import { formatBRL } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -49,10 +51,29 @@ export function DashboardPage() {
   const [vencidos, setVencidos] = useState<Vencidos | null>(null);
   const [contas, setContas] = useState<ContaBancaria[]>([]);
   const [erro, setErro] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const carregar = async () => {
+    setRefreshing(true);
+    try {
+      const [v, c] = await Promise.all([
+        request<Vencidos>('/v1/relatorios/vencidos'),
+        request<ContaBancaria[]>('/v1/contas-bancarias'),
+      ]);
+      setVencidos(v);
+      setContas(c);
+      setErro(null);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao carregar dados');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setRefreshing(true);
       try {
         const [v, c] = await Promise.all([
           request<Vencidos>('/v1/relatorios/vencidos'),
@@ -65,6 +86,8 @@ export function DashboardPage() {
         }
       } catch (e) {
         if (!cancelled) setErro(e instanceof Error ? e.message : 'Erro ao carregar dados');
+      } finally {
+        if (!cancelled) setRefreshing(false);
       }
     })();
     return () => {
@@ -112,6 +135,41 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <p className="text-sm text-slate-600">Atalhos e atualização do painel</p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={refreshing}
+            onClick={() => void carregar()}
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Atualizar
+          </Button>
+          <Button type="button" size="sm" className="gap-2" asChild>
+            <Link to="/contas-a-receber">
+              <ArrowDownCircle className="h-4 w-4" />
+              A receber
+            </Link>
+          </Button>
+          <Button type="button" size="sm" variant="secondary" className="gap-2" asChild>
+            <Link to="/contas-a-pagar">
+              <ArrowUpCircle className="h-4 w-4" />
+              A pagar
+            </Link>
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="gap-2" asChild>
+            <Link to="/bancos">
+              <Landmark className="h-4 w-4" />
+              Bancos
+            </Link>
+          </Button>
+        </div>
+      </div>
+
       {erro ? (
         <p className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
           <AlertCircle className="h-4 w-4" />

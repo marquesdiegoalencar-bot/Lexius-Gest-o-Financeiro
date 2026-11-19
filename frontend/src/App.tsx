@@ -12,8 +12,8 @@ import {
   ContasReceberPage,
   EmpresasPage,
   PessoasPage,
-  RelatoriosPage,
 } from '@/pages/modules';
+import { RelatoriosPage } from '@/pages/relatorios-page';
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },

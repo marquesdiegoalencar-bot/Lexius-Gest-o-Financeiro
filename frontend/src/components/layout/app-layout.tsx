@@ -18,8 +18,10 @@ export function AppLayout() {
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header title={handle?.title ?? 'Lexius Financeiro'} subtitle={handle?.subtitle} />
-        <main className="flex-1 overflow-auto p-6">
-          <Outlet />
+        <main className="flex-1 overflow-auto bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] p-6">
+          <div className="mx-auto w-full max-w-[1400px]">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
