@@ -46,9 +46,15 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 
   if (!res.ok) {
     let msg = res.statusText;
-    if (data && typeof data === 'object' && 'message' in data) {
+    if (typeof data === 'string' && data.startsWith('Cannot ')) {
+      msg = data.trim();
+    } else if (data && typeof data === 'object' && 'message' in data) {
       const m = (data as { message: string | string[] }).message;
       msg = Array.isArray(m) ? (m[0] ?? msg) : String(m);
+    }
+    if (res.status === 404 && msg.includes('Cannot POST') && path.includes('/auth/')) {
+      msg =
+        'Rota da API não encontrada. Atualize e reinicie o NestJS (branch com esqueci-senha), rode a migração 009 e confira VITE_API_URL (use http://localhost:3000, sem /v1 no final).';
     }
     if (res.status === 401) {
       if (token && path !== '/v1/auth/login') {

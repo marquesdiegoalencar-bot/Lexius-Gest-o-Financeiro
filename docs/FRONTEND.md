@@ -36,4 +36,5 @@ Cliente em `frontend/src/lib/api.ts` e hook `useApi()`. JWT e `X-Empresa-Id` vê
 
 1. Subir API: `npm run start:dev` na raiz (porta 3000).
 2. Subir UI: `npm run frontend:dev` ou `cd frontend && npm run dev`.
-3. Opcional: `VITE_API_URL=http://localhost:3000/v1` se não usar proxy.
+3. Se não usar proxy do Vite (`npm run dev` / `npm run preview`), defina `frontend/.env` com `VITE_API_URL=http://localhost:3000` (**sem** `/v1` no final — os paths já incluem `/v1/...`).
+4. API na porta 3000 precisa estar na revisão que expõe `POST /v1/auth/esqueci-senha` (reinicie após `git pull` + `npm run build`).
