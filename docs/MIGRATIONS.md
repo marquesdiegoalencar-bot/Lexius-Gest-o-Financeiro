@@ -21,3 +21,15 @@
 | `016_*` | Orçamento (Bloco G — futuro) |
 
 Não renumerar migrations `001`–`011`. Novos blocos usam o próximo número livre.
+
+## Concorrência — ordem de bloqueio (centros de custo)
+
+Operações concorrentes no **mesmo `id` de centro** (ou no **pai** ao criar filho) serializam com `pessimistic_write` na linha alvo:
+
+| Operação | Linha bloqueada |
+|----------|-----------------|
+| Novo vínculo financeiro (título) | Centro analítico vinculado |
+| Inativar / reativar / mudar `pai_id` | O próprio centro; ao mudar pai, também o novo pai |
+| Criar filho na hierarquia | Pai (`pai_id`) |
+
+Não há ordenação multi-linha obrigatória além de **pai antes do insert do filho** e **self-lock em updates**. Duas sessões que disputam o mesmo pai ou o mesmo centro aguardam na fila do PostgreSQL; deadlocks entre estas rotas não foram observados nos testes determinísticos (`test/centros-custo-concorrencia-deterministica.e2e-spec.ts`).
