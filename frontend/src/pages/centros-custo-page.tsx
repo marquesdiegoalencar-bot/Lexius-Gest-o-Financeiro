@@ -24,7 +24,7 @@ const emptyForm = () => ({
 });
 
 export function CentrosCustoPage() {
-  const { request } = useApi();
+  const { request, empresaId } = useApi();
   const [tab, setTab] = useState<TipoTab>('ENTRADA');
   const [rows, setRows] = useState<CentroRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +34,7 @@ export function CentrosCustoPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [sucesso, setSucesso] = useState<string | null>(null);
 
   const load = useCallback(
     async (silent?: boolean) => {
@@ -82,6 +83,11 @@ export function CentrosCustoPage() {
   };
 
   const save = async () => {
+    setSucesso(null);
+    if (!empresaId) {
+      setErro('Selecione uma empresa no cabeçalho antes de salvar.');
+      return;
+    }
     if (!form.nome.trim()) {
       setErro('Informe o centro de custo (nome).');
       return;
@@ -89,24 +95,34 @@ export function CentrosCustoPage() {
     setSaving(true);
     setErro(null);
     try {
-      const body = {
-        codigo: form.codigo.trim() || undefined,
+      const body: Record<string, string> = {
         nome: form.nome.trim(),
-        descricao: form.descricao.trim() || undefined,
-        tipo: tab,
       };
+      const codigo = form.codigo.trim();
+      if (codigo) body.codigo = codigo;
+      const descricao = form.descricao.trim();
+      if (descricao) body.descricao = descricao;
+      if (!editingId) body.tipo = tab;
+
       if (editingId) {
         await request(`/v1/centros-custo/${editingId}`, {
           method: 'PATCH',
           body: JSON.stringify(body),
         });
+        setSucesso('Alterações salvas com sucesso.');
       } else {
         await request('/v1/centros-custo', { method: 'POST', body: JSON.stringify(body) });
+        setSucesso('Centro de custo cadastrado com sucesso.');
       }
       cancelForm();
       await load(true);
     } catch (e) {
-      setErro(e instanceof ApiError ? e.message : 'Erro ao salvar');
+      const msg = e instanceof ApiError ? e.message : 'Erro ao salvar';
+      setErro(
+        msg.includes('column') || msg.includes('tipo_centro')
+          ? `${msg} — execute npm run db:migrate no servidor da API.`
+          : msg,
+      );
     } finally {
       setSaving(false);
     }
@@ -156,6 +172,11 @@ export function CentrosCustoPage() {
         </div>
       </div>
 
+      {sucesso ? (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-900">
+          {sucesso}
+        </p>
+      ) : null}
       {erro ? (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">{erro}</p>
       ) : null}
@@ -163,6 +184,13 @@ export function CentrosCustoPage() {
       {formOpen ? (
         <Card className="border-lexius-200 shadow-sm">
           <CardContent className="space-y-4 pt-6">
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void save();
+              }}
+            >
             <p className="text-sm font-medium text-slate-800">
               {editingId ? 'Editar registro' : `Novo — ${tab === 'ENTRADA' ? 'Entrada' : 'Saída'}`}
             </p>
@@ -190,7 +218,7 @@ export function CentrosCustoPage() {
               </Field>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" disabled={saving} onClick={() => void save()}>
+              <Button type="submit" disabled={saving}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Salvar
               </Button>
@@ -198,6 +226,7 @@ export function CentrosCustoPage() {
                 Cancelar
               </Button>
             </div>
+            </form>
           </CardContent>
         </Card>
       ) : null}

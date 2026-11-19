@@ -113,7 +113,13 @@ export function ApiResourcePage<T extends Record<string, unknown>>({
 
   const submitCreate = async () => {
     if (!create) return;
+    const missing = createFields.filter((f) => f.required && !formValues[f.key]?.trim());
+    if (missing.length > 0) {
+      setErro(`Preencha: ${missing.map((f) => f.label).join(', ')}`);
+      return;
+    }
     setSaving(true);
+    setErro(null);
     try {
       const body = create.buildBody(formValues);
       await request(create.path, { method: create.method ?? 'POST', body: JSON.stringify(body) });
@@ -166,6 +172,13 @@ export function ApiResourcePage<T extends Record<string, unknown>>({
       {showCreate && create ? (
         <Card className="border-lexius-200 shadow-sm">
           <CardContent className="space-y-4 pt-6">
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submitCreate();
+              }}
+            >
             <p className="text-sm font-medium text-slate-800">{create.submitLabel ?? 'Novo registro'}</p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {createFields.map((field) => (
@@ -199,7 +212,7 @@ export function ApiResourcePage<T extends Record<string, unknown>>({
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" disabled={saving} onClick={() => void submitCreate()}>
+              <Button type="submit" disabled={saving}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Salvar
               </Button>
@@ -207,6 +220,7 @@ export function ApiResourcePage<T extends Record<string, unknown>>({
                 Cancelar
               </Button>
             </div>
+            </form>
           </CardContent>
         </Card>
       ) : null}

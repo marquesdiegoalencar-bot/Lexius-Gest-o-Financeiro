@@ -37,13 +37,23 @@ export class CentrosCustoController {
   }
 
   @Post()
-  @RequirePapeis(PapelUsuario.MASTER, PapelUsuario.ADMIN, PapelUsuario.FINANCEIRO)
+  @RequirePapeis(
+    PapelUsuario.MASTER,
+    PapelUsuario.ADMIN,
+    PapelUsuario.FINANCEIRO,
+    PapelUsuario.OPERADOR,
+  )
   create(@Req() req: { empresaId: string }, @Body() dto: CreateCentroCustoDto) {
     return this.service.create(req.empresaId, dto);
   }
 
   @Patch(':id')
-  @RequirePapeis(PapelUsuario.MASTER, PapelUsuario.ADMIN, PapelUsuario.FINANCEIRO)
+  @RequirePapeis(
+    PapelUsuario.MASTER,
+    PapelUsuario.ADMIN,
+    PapelUsuario.FINANCEIRO,
+    PapelUsuario.OPERADOR,
+  )
   update(
     @Param('id') id: string,
     @Req() req: { empresaId: string },
