@@ -59,7 +59,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                 <Separator className="my-1" />
                 <DropdownMenu.Item
                   className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-red-600 outline-none hover:bg-red-50"
-                  onSelect={logout}
+                  onSelect={() => logout()}
                 >
                   <LogOut className="h-4 w-4" />
                   Sair

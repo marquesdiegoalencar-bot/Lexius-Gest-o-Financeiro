@@ -1,3 +1,5 @@
+import { notifyUnauthorizedFromApi } from './session-events';
+
 const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
 export class ApiError extends Error {
@@ -47,6 +49,16 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     if (data && typeof data === 'object' && 'message' in data) {
       const m = (data as { message: string | string[] }).message;
       msg = Array.isArray(m) ? (m[0] ?? msg) : String(m);
+    }
+    if (res.status === 401) {
+      if (token && path !== '/v1/auth/login') {
+        notifyUnauthorizedFromApi();
+      }
+      if (msg === 'Unauthorized' || !msg) {
+        msg = 'Sessão expirada ou token inválido. Faça login novamente.';
+      }
+    } else if (res.status === 403 && (msg === 'Forbidden' || !msg)) {
+      msg = 'Sem permissão para esta operação ou empresa.';
     }
     throw new ApiError(msg, res.status, data);
   }

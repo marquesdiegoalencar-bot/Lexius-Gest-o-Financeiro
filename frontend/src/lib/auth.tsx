@@ -2,11 +2,13 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react';
 import { apiFetch } from './api';
+import { clearUnauthorizedHandler, registerUnauthorizedHandler } from './session-events';
 
 export type EmpresaVinculo = {
   empresa_id: string;
@@ -46,7 +48,7 @@ function loadStored(): AuthState {
 
 type AuthContextValue = AuthState & {
   login: (email: string, senha: string) => Promise<void>;
-  logout: () => void;
+  logout: (redirectToLogin?: boolean) => void;
   setEmpresaId: (id: string) => void;
   empresaAtiva: EmpresaVinculo | null;
   isAuthenticated: boolean;
@@ -54,8 +56,20 @@ type AuthContextValue = AuthState & {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function normalizeAuthState(raw: AuthState): AuthState {
+  if (!raw.token || !raw.usuario) {
+    return { token: null, usuario: null, empresaId: null };
+  }
+  const empresas = raw.usuario.empresas ?? [];
+  let empresaId = raw.empresaId;
+  if (!empresaId || !empresas.some((e) => e.empresa_id === empresaId)) {
+    empresaId = empresas[0]?.empresa_id ?? null;
+  }
+  return { token: raw.token, usuario: raw.usuario, empresaId };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>(loadStored);
+  const [state, setState] = useState<AuthState>(() => normalizeAuthState(loadStored()));
 
   const persist = useCallback((next: AuthState) => {
     setState(next);
@@ -82,9 +96,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
-  const logout = useCallback(() => {
-    persist({ token: null, usuario: null, empresaId: null });
-  }, [persist]);
+  const logout = useCallback(
+    (redirectToLogin = false) => {
+      persist({ token: null, usuario: null, empresaId: null });
+      if (redirectToLogin && typeof window !== 'undefined') {
+        const base = window.location.pathname.startsWith('/login') ? '' : '/login?reason=session_expired';
+        if (base) window.location.assign(base);
+      }
+    },
+    [persist],
+  );
+
+  useEffect(() => {
+    registerUnauthorizedHandler(() => logout(true));
+    return () => clearUnauthorizedHandler();
+  }, [logout]);
 
   const setEmpresaId = useCallback(
     (id: string) => {

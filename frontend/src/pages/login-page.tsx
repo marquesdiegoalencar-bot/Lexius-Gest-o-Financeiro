@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Wallet } from 'lucide-react';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -12,6 +12,8 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const [searchParams] = useSearchParams();
+  const sessionExpired = searchParams.get('reason') === 'session_expired';
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -70,6 +72,11 @@ export function LoginPage() {
                 required
               />
             </div>
+            {sessionExpired ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Sua sessão expirou. Entre novamente para continuar.
+              </p>
+            ) : null}
             {erro ? <p className="text-sm text-red-600">{erro}</p> : null}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Entrando…' : 'Entrar'}
