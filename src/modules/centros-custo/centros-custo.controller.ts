@@ -24,6 +24,18 @@ export class CentrosCustoController {
     return this.service.list(req.empresaId, tipo);
   }
 
+  @Get('arvore')
+  @RequirePapeis(
+    PapelUsuario.MASTER,
+    PapelUsuario.ADMIN,
+    PapelUsuario.FINANCEIRO,
+    PapelUsuario.OPERADOR,
+    PapelUsuario.CONSULTA,
+  )
+  arvore(@Req() req: { empresaId: string }, @Query('tipo') tipo?: TipoCentroCusto) {
+    return this.service.listArvore(req.empresaId, tipo);
+  }
+
   @Get(':id')
   @RequirePapeis(
     PapelUsuario.MASTER,

@@ -1,5 +1,5 @@
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
-import { TipoCentroCusto } from '../../../database/enums';
+import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { TipoCentroCusto, TipoNoCentroCusto } from '../../../database/enums';
 
 export class CreateCentroCustoDto {
   @IsOptional()
@@ -17,4 +17,12 @@ export class CreateCentroCustoDto {
   @IsOptional()
   @IsEnum(TipoCentroCusto)
   tipo?: TipoCentroCusto;
+
+  @IsOptional()
+  @IsUUID()
+  pai_id?: string;
+
+  @IsOptional()
+  @IsEnum(TipoNoCentroCusto)
+  tipo_no?: TipoNoCentroCusto;
 }

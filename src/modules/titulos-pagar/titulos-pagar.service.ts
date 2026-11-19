@@ -9,11 +9,13 @@ import { OrigemTitulo, StatusAprovacaoTituloPagar, StatusTitulo } from '../../da
 import { CreateTituloPagarDto } from './dto/create-titulo-pagar.dto';
 import { FiltroTituloPagarDto } from './dto/filtro-titulo-pagar.dto';
 import { RejeitarTituloPagarDto } from './dto/rejeitar-titulo-pagar.dto';
+import { CentrosCustoService } from '../centros-custo/centros-custo.service';
 
 @Injectable()
 export class TitulosPagarService {
   constructor(
     private auditoria: AuditoriaService,
+    private centrosCusto: CentrosCustoService,
     @InjectRepository(TituloPagar) private repo: Repository<TituloPagar>,
   ) {}
 
@@ -39,6 +41,9 @@ export class TitulosPagarService {
   }
 
   async create(empresaId: string, usuarioId: string, dto: CreateTituloPagarDto) {
+    if (dto.centro_custo_id) {
+      await this.centrosCusto.assertVinculoFinanceiro(empresaId, dto.centro_custo_id);
+    }
     if (dto.parcelas?.length) {
       const grupoId = randomUUID();
       const total = dto.parcelas.length;

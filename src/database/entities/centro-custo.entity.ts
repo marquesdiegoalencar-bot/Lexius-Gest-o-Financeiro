@@ -1,5 +1,5 @@
-import { Column, Entity, PrimaryGeneratedColumn, Unique } from 'typeorm';
-import { TipoCentroCusto } from '../enums';
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique } from 'typeorm';
+import { TipoCentroCusto, TipoNoCentroCusto } from '../enums';
 
 @Entity('centros_custo')
 @Unique(['empresaId', 'codigo'])
@@ -26,6 +26,21 @@ export class CentroCusto {
     default: TipoCentroCusto.ENTRADA,
   })
   tipo!: TipoCentroCusto;
+
+  @Column({ name: 'pai_id', type: 'uuid', nullable: true })
+  paiId!: string | null;
+
+  @ManyToOne(() => CentroCusto, { nullable: true })
+  @JoinColumn({ name: 'pai_id' })
+  pai?: CentroCusto | null;
+
+  @Column({
+    name: 'tipo_no',
+    type: 'enum',
+    enum: TipoNoCentroCusto,
+    enumName: 'tipo_no_centro_custo',
+  })
+  tipoNo!: TipoNoCentroCusto;
 
   @Column({ default: true })
   ativo!: boolean;

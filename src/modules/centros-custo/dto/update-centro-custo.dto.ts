@@ -1,5 +1,5 @@
-import { IsBoolean, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
-import { TipoCentroCusto } from '../../../database/enums';
+import { IsBoolean, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { TipoCentroCusto, TipoNoCentroCusto } from '../../../database/enums';
 
 export class UpdateCentroCustoDto {
   @IsOptional()
@@ -22,4 +22,12 @@ export class UpdateCentroCustoDto {
   @IsOptional()
   @IsBoolean()
   ativo?: boolean;
+
+  @IsOptional()
+  @IsUUID()
+  pai_id?: string | null;
+
+  @IsOptional()
+  @IsEnum(TipoNoCentroCusto)
+  tipo_no?: TipoNoCentroCusto;
 }

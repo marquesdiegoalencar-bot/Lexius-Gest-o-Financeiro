@@ -38,9 +38,9 @@ describe('centros-custo (e2e)', () => {
     const migCols = await dataSource.query(
       `SELECT column_name FROM information_schema.columns
        WHERE table_schema = 'public' AND table_name = 'centros_custo'
-       AND column_name IN ('codigo', 'descricao', 'tipo')`,
+       AND column_name IN ('codigo', 'descricao', 'tipo', 'pai_id', 'tipo_no')`,
     );
-    expect(migCols.length).toBe(3);
+    expect(migCols.length).toBe(5);
 
     ({ token: masterToken, empresaId: masterEmpresaId } = await login(
       app,
@@ -148,6 +148,184 @@ describe('centros-custo (e2e)', () => {
       .set(authHeaders(consultaToken, masterEmpresaId))
       .send({ nome: 'Bloqueado consulta', tipo: 'ENTRADA' });
     expect(criar.status).toBe(403);
+  });
+
+  it('hierarquia válida: GRUPO → SUBGRUPO → ANALITICO (3 níveis)', async () => {
+    const grupo = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ nome: 'Grupo E2E', tipo: 'ENTRADA', tipo_no: 'GRUPO' });
+    expect(grupo.status).toBe(201);
+
+    const sub = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ nome: 'Subgrupo E2E', tipo: 'ENTRADA', tipo_no: 'SUBGRUPO', pai_id: grupo.body.id });
+    expect(sub.status).toBe(201);
+
+    const analitico = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ nome: 'Analítico E2E', tipo: 'ENTRADA', tipo_no: 'ANALITICO', pai_id: sub.body.id });
+    expect(analitico.status).toBe(201);
+
+    const arvore = await request(app.getHttpServer())
+      .get('/v1/centros-custo/arvore?tipo=ENTRADA')
+      .set(authHeaders(masterToken, masterEmpresaId));
+    expect(arvore.status).toBe(200);
+    const raiz = arvore.body.find((n: { id: string }) => n.id === grupo.body.id);
+    expect(raiz?.filhos?.[0]?.id).toBe(sub.body.id);
+  });
+
+  it('rejeita SUBGRUPO raiz, profundidade > 3 e SUBGRUPO sob SUBGRUPO', async () => {
+    const subRaiz = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ nome: 'Sub raiz', tipo: 'ENTRADA', tipo_no: 'SUBGRUPO' });
+    expect(subRaiz.status).toBe(400);
+
+    const g = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ nome: 'G prof', tipo: 'ENTRADA', tipo_no: 'GRUPO' });
+    const s = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ nome: 'S prof', tipo: 'ENTRADA', tipo_no: 'SUBGRUPO', pai_id: g.body.id });
+    const a = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ nome: 'A prof', tipo: 'ENTRADA', tipo_no: 'ANALITICO', pai_id: s.body.id });
+    expect(a.status).toBe(201);
+
+    const quarto = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({
+        nome: 'Abaixo analítico',
+        tipo: 'ENTRADA',
+        tipo_no: 'ANALITICO',
+        pai_id: a.body.id,
+      });
+    expect(quarto.status).toBe(400);
+
+    const g2 = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ nome: 'G2', tipo: 'ENTRADA', tipo_no: 'GRUPO' });
+    const s1 = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ nome: 'S1', tipo: 'ENTRADA', tipo_no: 'SUBGRUPO', pai_id: g2.body.id });
+    const s2 = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ nome: 'S2', tipo: 'ENTRADA', tipo_no: 'SUBGRUPO', pai_id: s1.body.id });
+    expect(s2.status).toBe(400);
+  });
+
+  it('inativação: grupo com filho ativo bloqueia; analítico com título em aberto permite', async () => {
+    const grupo = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ nome: 'Grupo inat', tipo: 'ENTRADA', tipo_no: 'GRUPO' });
+    const filho = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({
+        nome: 'Filho ativo',
+        tipo: 'ENTRADA',
+        tipo_no: 'ANALITICO',
+        pai_id: grupo.body.id,
+      });
+    const bloqueio = await request(app.getHttpServer())
+      .patch(`/v1/centros-custo/${grupo.body.id}`)
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ ativo: false });
+    expect(bloqueio.status).toBe(400);
+
+    const analitico = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ nome: 'CC título', tipo: 'ENTRADA', tipo_no: 'ANALITICO' });
+    const [cat] = await dataSource.query(`SELECT id FROM categorias WHERE codigo = '1.01' AND empresa_id IS NULL`);
+    const titulo = await request(app.getHttpServer())
+      .post('/v1/titulos-receber')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({
+        descricao: 'Com CC',
+        categoria_id: cat.id,
+        centro_custo_id: analitico.body.id,
+        valor_original: 100,
+        data_vencimento: '2026-12-31',
+      });
+    expect(titulo.status).toBe(201);
+
+    const inativar = await request(app.getHttpServer())
+      .patch(`/v1/centros-custo/${analitico.body.id}`)
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ ativo: false });
+    expect(inativar.status).toBe(200);
+
+    const novoVinculo = await request(app.getHttpServer())
+      .post('/v1/titulos-receber')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({
+        descricao: 'CC inativo',
+        categoria_id: cat.id,
+        centro_custo_id: analitico.body.id,
+        valor_original: 50,
+        data_vencimento: '2026-12-31',
+      });
+    expect(novoVinculo.status).toBe(400);
+
+    const grupoVinculo = await request(app.getHttpServer())
+      .post('/v1/titulos-receber')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({
+        descricao: 'CC grupo',
+        categoria_id: cat.id,
+        centro_custo_id: grupo.body.id,
+        valor_original: 50,
+        data_vencimento: '2026-12-31',
+      });
+    expect(grupoVinculo.status).toBe(400);
+  });
+
+  it('reativação exige pai ativo', async () => {
+    const grupo = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ nome: 'Pai reativ', tipo: 'ENTRADA', tipo_no: 'GRUPO' });
+    const filho = await request(app.getHttpServer())
+      .post('/v1/centros-custo')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ nome: 'Filho reativ', tipo: 'ENTRADA', tipo_no: 'ANALITICO', pai_id: grupo.body.id });
+
+    await request(app.getHttpServer())
+      .patch(`/v1/centros-custo/${filho.body.id}`)
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ ativo: false });
+    await request(app.getHttpServer())
+      .patch(`/v1/centros-custo/${grupo.body.id}`)
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ ativo: false });
+
+    const reativarFilho = await request(app.getHttpServer())
+      .patch(`/v1/centros-custo/${filho.body.id}`)
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ ativo: true });
+    expect(reativarFilho.status).toBe(400);
+
+    await request(app.getHttpServer())
+      .patch(`/v1/centros-custo/${grupo.body.id}`)
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ ativo: true });
+    const reativarOk = await request(app.getHttpServer())
+      .patch(`/v1/centros-custo/${filho.body.id}`)
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ ativo: true });
+    expect(reativarOk.status).toBe(200);
   });
 
   it('isolamento: centro criado não aparece com X-Empresa-Id de outra empresa', async () => {

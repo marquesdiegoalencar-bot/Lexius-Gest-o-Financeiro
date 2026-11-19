@@ -9,5 +9,6 @@ import { CentrosCustoService } from './centros-custo.service';
   imports: [TypeOrmModule.forFeature([CentroCusto]), AuthModule],
   controllers: [CentrosCustoController],
   providers: [CentrosCustoService],
+  exports: [CentrosCustoService],
 })
 export class CentrosCustoModule {}

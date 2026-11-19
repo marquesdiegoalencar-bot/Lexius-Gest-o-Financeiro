@@ -28,6 +28,12 @@ export enum TipoCentroCusto {
   SAIDA = 'SAIDA',
 }
 
+export enum TipoNoCentroCusto {
+  GRUPO = 'GRUPO',
+  SUBGRUPO = 'SUBGRUPO',
+  ANALITICO = 'ANALITICO',
+}
+
 export enum ProvedorBancario {
   INTER = 'INTER',
   ASAAS = 'ASAAS',

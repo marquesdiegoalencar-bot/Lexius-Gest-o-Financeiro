@@ -168,6 +168,7 @@ CREATE TABLE categorias (
 );
 
 CREATE TYPE tipo_centro_custo AS ENUM ('ENTRADA', 'SAIDA');
+CREATE TYPE tipo_no_centro_custo AS ENUM ('GRUPO', 'SUBGRUPO', 'ANALITICO');
 
 CREATE TABLE centros_custo (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -176,6 +177,8 @@ CREATE TABLE centros_custo (
     nome          TEXT NOT NULL,
     descricao     TEXT,
     tipo          tipo_centro_custo NOT NULL DEFAULT 'ENTRADA',
+    pai_id        UUID REFERENCES centros_custo(id),
+    tipo_no       tipo_no_centro_custo NOT NULL,
     ativo         BOOLEAN NOT NULL DEFAULT TRUE,
     UNIQUE (empresa_id, codigo)
 );

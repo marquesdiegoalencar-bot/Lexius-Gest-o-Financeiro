@@ -9,11 +9,13 @@ import { OrigemTitulo, StatusTitulo } from '../../database/enums';
 import { CreateTituloReceberDto } from './dto/create-titulo-receber.dto';
 import { FiltroTituloReceberDto } from './dto/filtro-titulo-receber.dto';
 import { ParcelarTituloReceberDto } from './dto/parcelar-titulo-receber.dto';
+import { CentrosCustoService } from '../centros-custo/centros-custo.service';
 
 @Injectable()
 export class TitulosReceberService {
   constructor(
     private auditoria: AuditoriaService,
+    private centrosCusto: CentrosCustoService,
     @InjectRepository(TituloReceber) private repo: Repository<TituloReceber>,
   ) {}
 
@@ -39,6 +41,9 @@ export class TitulosReceberService {
   }
 
   async createManual(empresaId: string, usuarioId: string, dto: CreateTituloReceberDto) {
+    if (dto.centro_custo_id) {
+      await this.centrosCusto.assertVinculoFinanceiro(empresaId, dto.centro_custo_id);
+    }
     const titulo = await this.repo.save(
       this.repo.create({
         empresaId,
@@ -69,6 +74,9 @@ export class TitulosReceberService {
   }
 
   async parcelar(empresaId: string, usuarioId: string, dto: ParcelarTituloReceberDto) {
+    if (dto.centro_custo_id) {
+      await this.centrosCusto.assertVinculoFinanceiro(empresaId, dto.centro_custo_id);
+    }
     const grupoId = randomUUID();
     const total = dto.parcelas.length;
     const titulos: TituloReceber[] = [];

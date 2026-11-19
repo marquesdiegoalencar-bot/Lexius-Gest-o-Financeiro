@@ -1,10 +1,17 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CentroCusto } from '../../database/entities/centro-custo.entity';
-import { TipoCentroCusto } from '../../database/enums';
+import { TipoCentroCusto, TipoNoCentroCusto } from '../../database/enums';
 import { CreateCentroCustoDto } from './dto/create-centro-custo.dto';
 import { UpdateCentroCustoDto } from './dto/update-centro-custo.dto';
+
+const MAX_PROFUNDIDADE = 3;
 
 @Injectable()
 export class CentrosCustoService {
@@ -19,6 +26,24 @@ export class CentrosCustoService {
     });
   }
 
+  async listArvore(empresaId: string, tipo?: TipoCentroCusto) {
+    const flat = await this.list(empresaId, tipo);
+    type NoArvore = CentroCusto & { filhos: NoArvore[] };
+    const byId = new Map<string, NoArvore>();
+    for (const c of flat) {
+      byId.set(c.id, { ...c, filhos: [] });
+    }
+    const raizes: NoArvore[] = [];
+    for (const c of byId.values()) {
+      if (c.paiId && byId.has(c.paiId)) {
+        byId.get(c.paiId)!.filhos.push(c);
+      } else {
+        raizes.push(c);
+      }
+    }
+    return raizes;
+  }
+
   async findOne(id: string, empresaId: string) {
     const c = await this.repo.findOne({ where: { id, empresaId } });
     if (!c) throw new NotFoundException('Centro de custo não encontrado');
@@ -27,13 +52,19 @@ export class CentrosCustoService {
 
   async create(empresaId: string, dto: CreateCentroCustoDto) {
     await this.assertCodigoLivre(empresaId, dto.codigo, undefined);
+    const tipoNo = dto.tipo_no ?? TipoNoCentroCusto.ANALITICO;
+    const paiId = dto.pai_id ?? null;
+    const tipo = dto.tipo ?? TipoCentroCusto.ENTRADA;
+    await this.validateNovoNo(empresaId, tipoNo, paiId, tipo);
     return this.repo.save(
       this.repo.create({
         empresaId,
         codigo: dto.codigo?.trim() || null,
         nome: dto.nome.trim(),
         descricao: dto.descricao?.trim() || null,
-        tipo: dto.tipo ?? TipoCentroCusto.ENTRADA,
+        tipo,
+        tipoNo,
+        paiId,
       }),
     );
   }
@@ -47,8 +78,199 @@ export class CentrosCustoService {
     if (dto.nome !== undefined) c.nome = dto.nome.trim();
     if (dto.descricao !== undefined) c.descricao = dto.descricao?.trim() || null;
     if (dto.tipo !== undefined) c.tipo = dto.tipo;
-    if (dto.ativo !== undefined) c.ativo = dto.ativo;
+
+    const tipoNoFuturo = dto.tipo_no ?? c.tipoNo;
+    const paiIdFuturo = dto.pai_id !== undefined ? dto.pai_id ?? null : c.paiId;
+
+    if (dto.pai_id !== undefined || dto.tipo_no !== undefined) {
+      await this.validateNoExistente(empresaId, id, tipoNoFuturo, paiIdFuturo, c.tipo);
+    }
+
+    if (dto.ativo === false && c.ativo) {
+      await this.assertPodeInativar(c);
+      c.ativo = false;
+    } else if (dto.ativo === true && !c.ativo) {
+      await this.assertPodeReativar(empresaId, c, tipoNoFuturo, paiIdFuturo);
+      c.ativo = true;
+    } else if (dto.ativo !== undefined) {
+      c.ativo = dto.ativo;
+    }
+
+    if (dto.tipo_no !== undefined) c.tipoNo = tipoNoFuturo;
+    if (dto.pai_id !== undefined) c.paiId = paiIdFuturo;
+
     return this.repo.save(c);
+  }
+
+  /** Novo vínculo financeiro: somente centro analítico ativo da mesma empresa. */
+  async assertVinculoFinanceiro(empresaId: string, centroCustoId: string) {
+    const rows: Array<{ id: string; tipo_no: string; ativo: boolean }> = await this.repo.manager.query(
+      `SELECT id, tipo_no::text, ativo
+       FROM centros_custo
+       WHERE id = $1 AND empresa_id = $2
+       FOR UPDATE`,
+      [centroCustoId, empresaId],
+    );
+    const c = rows[0];
+    if (!c) {
+      throw new NotFoundException('Centro de custo não encontrado');
+    }
+    if (c.tipo_no !== TipoNoCentroCusto.ANALITICO || !c.ativo) {
+      throw new BadRequestException(
+        'Somente centros de custo analíticos ativos podem receber novos vínculos financeiros',
+      );
+    }
+  }
+
+  private async validateNovoNo(
+    empresaId: string,
+    tipoNo: TipoNoCentroCusto,
+    paiId: string | null,
+    tipoEntradaSaida: TipoCentroCusto,
+  ) {
+    this.assertRaizPermitida(tipoNo, paiId);
+    if (paiId) {
+      const pai = await this.findOne(paiId, empresaId);
+      if (!pai.ativo) {
+        throw new BadRequestException('O centro de custo pai deve estar ativo');
+      }
+      if (pai.tipo !== tipoEntradaSaida) {
+        throw new BadRequestException('Centro de custo pai deve ter o mesmo tipo (entrada/saída)');
+      }
+      this.assertFilhoPermitido(pai.tipoNo, tipoNo);
+      await this.assertNotCycle('00000000-0000-4000-8000-000000000000', paiId);
+      const profundidadePai = await this.profundidadeNo(paiId, empresaId);
+      if (profundidadePai + 1 > MAX_PROFUNDIDADE) {
+        throw new BadRequestException(`Profundidade máxima da hierarquia é ${MAX_PROFUNDIDADE} níveis`);
+      }
+    }
+  }
+
+  private async validateNoExistente(
+    empresaId: string,
+    id: string,
+    tipoNo: TipoNoCentroCusto,
+    paiId: string | null,
+    tipoEntradaSaida: TipoCentroCusto,
+  ) {
+    this.assertRaizPermitida(tipoNo, paiId);
+    if (tipoNo === TipoNoCentroCusto.ANALITICO) {
+      const temFilhos = await this.repo.exist({ where: { paiId: id } });
+      if (temFilhos) {
+        throw new BadRequestException('Centro analítico não pode ter filhos na hierarquia');
+      }
+    }
+    if (paiId) {
+      if (paiId === id) {
+        throw new BadRequestException('Centro de custo não pode ser pai de si mesmo');
+      }
+      const pai = await this.findOne(paiId, empresaId);
+      if (pai.tipo !== tipoEntradaSaida) {
+        throw new BadRequestException('Centro de custo pai deve ter o mesmo tipo (entrada/saída)');
+      }
+      this.assertFilhoPermitido(pai.tipoNo, tipoNo);
+      await this.assertNotCycle(id, paiId);
+      const profundidadePai = await this.profundidadeNo(paiId, empresaId);
+      const alturaSubarvore = await this.alturaSubarvore(id);
+      if (profundidadePai + alturaSubarvore > MAX_PROFUNDIDADE) {
+        throw new BadRequestException(`Profundidade máxima da hierarquia é ${MAX_PROFUNDIDADE} níveis`);
+      }
+    }
+  }
+
+  private assertRaizPermitida(tipoNo: TipoNoCentroCusto, paiId: string | null) {
+    if (tipoNo === TipoNoCentroCusto.SUBGRUPO && !paiId) {
+      throw new BadRequestException('Subgrupo não pode ser raiz; informe um grupo pai');
+    }
+  }
+
+  private assertFilhoPermitido(paiTipoNo: TipoNoCentroCusto, filhoTipoNo: TipoNoCentroCusto) {
+    if (filhoTipoNo === TipoNoCentroCusto.GRUPO) {
+      throw new BadRequestException('Grupo não pode ser filho na hierarquia');
+    }
+    if (paiTipoNo === TipoNoCentroCusto.ANALITICO) {
+      throw new BadRequestException('Centro analítico não pode ter filhos');
+    }
+    if (paiTipoNo === TipoNoCentroCusto.SUBGRUPO && filhoTipoNo === TipoNoCentroCusto.SUBGRUPO) {
+      throw new BadRequestException('Subgrupo não pode ter outro subgrupo como filho');
+    }
+    if (paiTipoNo === TipoNoCentroCusto.SUBGRUPO && filhoTipoNo !== TipoNoCentroCusto.ANALITICO) {
+      throw new BadRequestException('Subgrupo só pode ter centro analítico como filho');
+    }
+  }
+
+  private async assertNotCycle(nodeId: string, newPaiId: string) {
+    let current: string | null = newPaiId;
+    while (current) {
+      if (current === nodeId) {
+        throw new BadRequestException('Hierarquia inválida: referência circular');
+      }
+      const row = await this.repo.findOne({ where: { id: current }, select: { id: true, paiId: true } });
+      if (!row) break;
+      current = row.paiId;
+    }
+  }
+
+  private async profundidadeNo(id: string, empresaId: string): Promise<number> {
+    let depth = 1;
+    let current = await this.findOne(id, empresaId);
+    while (current.paiId) {
+      depth += 1;
+      current = await this.findOne(current.paiId, empresaId);
+    }
+    return depth;
+  }
+
+  private async alturaSubarvore(id: string): Promise<number> {
+    const filhos = await this.repo.find({ where: { paiId: id }, select: { id: true } });
+    if (filhos.length === 0) return 1;
+    let maxChild = 0;
+    for (const f of filhos) {
+      const h = await this.alturaSubarvore(f.id);
+      if (h > maxChild) maxChild = h;
+    }
+    return 1 + maxChild;
+  }
+
+  private async assertPodeInativar(c: CentroCusto) {
+    if (c.tipoNo === TipoNoCentroCusto.ANALITICO) {
+      return;
+    }
+    const ativos = await this.hasActiveDescendant(c.id);
+    if (ativos) {
+      throw new BadRequestException(
+        'Grupo ou subgrupo com descendentes ativos não pode ser inativado',
+      );
+    }
+  }
+
+  private async assertPodeReativar(
+    empresaId: string,
+    c: CentroCusto,
+    tipoNo: TipoNoCentroCusto,
+    paiId: string | null,
+  ) {
+    await this.validateNoExistente(empresaId, c.id, tipoNo, paiId, c.tipo);
+    if (paiId) {
+      const pai = await this.findOne(paiId, empresaId);
+      if (!pai.ativo) {
+        throw new BadRequestException('Reativação exige centro de custo pai ativo');
+      }
+    }
+  }
+
+  private async hasActiveDescendant(id: string): Promise<boolean> {
+    const rows = await this.repo.query(
+      `WITH RECURSIVE descendentes AS (
+         SELECT id, ativo FROM centros_custo WHERE pai_id = $1
+         UNION ALL
+         SELECT c.id, c.ativo FROM centros_custo c
+         INNER JOIN descendentes d ON c.pai_id = d.id
+       )
+       SELECT 1 FROM descendentes WHERE ativo = true LIMIT 1`,
+      [id],
+    );
+    return rows.length > 0;
   }
 
   private async assertCodigoLivre(empresaId: string, codigo: string | undefined, ignoreId?: string) {
