@@ -30,13 +30,19 @@ Não renumerar migrations `001`–`011`. Novos blocos usam o próximo número li
 psql "$DATABASE_URL" -f migrations/012_departamentos.sql
 ```
 
-**Reverter** (remove somente a tabela; não há vínculos em títulos até o Bloco D):
+**Reverter** — leia antes de executar em qualquer ambiente com dados:
+
+- `DROP TABLE IF EXISTS departamentos` **elimina todos os departamentos** cadastrados, de forma irreversível sem backup.
+- Só é aceitável quando a perda integral dos dados for expressamente aceita **e** não houver dependências (FKs de outras tabelas apontando para `departamentos`).
+- **Até o Bloco D:** em geral não há vínculos em títulos; mesmo assim, evite `DROP` em staging/produção com cadastros em uso — prefira backup ou migração de dados.
+- **A partir do Bloco D** (ex.: `departamento_id` em títulos): o rollback simples **não poderá** ser usado. Reversões devem passar por migrations próprias que tratem dependências (remover ou realocar FKs, preservar histórico) **antes** de alterar ou remover a tabela. Não use `DROP` para “desfazer” o bloco com histórico financeiro ativo.
 
 ```sql
+-- Somente ambiente vazio / perda aceita / sem FKs dependentes:
 DROP TABLE IF EXISTS departamentos;
 ```
 
-E2E e `scripts/reset-db.js` já incluem `schema.sql` + migrations em ordem lexicográfica.
+E2E e `scripts/reset-db.js` recriam o schema completo (`schema.sql` + migrations em ordem lexicográfica) e **não** dependem deste `DROP` manual.
 
 ## Concorrência — ordem de bloqueio (centros de custo)
 

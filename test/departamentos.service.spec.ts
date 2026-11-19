@@ -1,4 +1,5 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
+import { QueryFailedError } from 'typeorm';
 import { DepartamentosService } from '../src/modules/departamentos/departamentos.service';
 import { Departamento } from '../src/database/entities/departamento.entity';
 
@@ -15,6 +16,16 @@ describe('DepartamentosService (unit)', () => {
     };
     return repo;
   }
+
+  it('requireNome rejeita ausente, vazio e somente espaços', () => {
+    const repo = buildRepo();
+    const svc = new DepartamentosService(repo as never);
+    expect(() => svc.requireNome(undefined)).toThrow(BadRequestException);
+    expect(() => svc.requireNome(null)).toThrow(BadRequestException);
+    expect(() => svc.requireNome('')).toThrow(BadRequestException);
+    expect(() => svc.requireNome('   ')).toThrow(BadRequestException);
+    expect(svc.requireNome('  RH  ')).toBe('RH');
+  });
 
   it('assertVinculoFinanceiroFuturo rejeita departamento inativo', async () => {
     const repo = buildRepo({
@@ -36,5 +47,26 @@ describe('DepartamentosService (unit)', () => {
     await expect(
       svc.create(empresaId, { nome: 'X', codigo: 'DUP' }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('create converte violação única PostgreSQL (23505) em ConflictException', async () => {
+    const uniqueErr = new QueryFailedError(
+      'INSERT',
+      [],
+      Object.assign(new Error('duplicate'), {
+        code: '23505',
+        constraint: 'uq_departamentos_empresa_codigo',
+      }),
+    );
+    const repo = buildRepo({
+      findOne: jest.fn(async () => null),
+      save: jest.fn(async () => {
+        throw uniqueErr;
+      }),
+    });
+    const svc = new DepartamentosService(repo as never);
+    await expect(svc.create(empresaId, { nome: 'Y', codigo: 'C1' })).rejects.toMatchObject({
+      message: 'Código de departamento já em uso nesta empresa',
+    });
   });
 });

@@ -1,6 +1,11 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { Departamento } from '../../database/entities/departamento.entity';
 import { CreateDepartamentoDto } from './dto/create-departamento.dto';
 import { FiltroDepartamentoDto } from './dto/filtro-departamento.dto';
@@ -33,16 +38,16 @@ export class DepartamentosService {
   }
 
   async create(empresaId: string, dto: CreateDepartamentoDto) {
+    const nome = this.requireNome(dto.nome);
     await this.assertCodigoLivre(empresaId, dto.codigo, undefined);
-    return this.repo.save(
-      this.repo.create({
-        empresaId,
-        codigo: dto.codigo?.trim() || null,
-        nome: dto.nome.trim(),
-        descricao: dto.descricao?.trim() || null,
-        ativo: dto.ativo ?? true,
-      }),
-    );
+    const entity = this.repo.create({
+      empresaId,
+      codigo: dto.codigo?.trim() || null,
+      nome,
+      descricao: dto.descricao?.trim() || null,
+      ativo: dto.ativo ?? true,
+    });
+    return this.saveDepartamento(entity);
   }
 
   async update(id: string, empresaId: string, dto: UpdateDepartamentoDto) {
@@ -51,10 +56,10 @@ export class DepartamentosService {
       await this.assertCodigoLivre(empresaId, dto.codigo, id);
       d.codigo = dto.codigo?.trim() || null;
     }
-    if (dto.nome !== undefined) d.nome = dto.nome.trim();
+    if (dto.nome !== undefined) d.nome = this.requireNome(dto.nome);
     if (dto.descricao !== undefined) d.descricao = dto.descricao?.trim() || null;
     if (dto.ativo !== undefined) d.ativo = dto.ativo;
-    return this.repo.save(d);
+    return this.saveDepartamento(d);
   }
 
   /** Reservado para Bloco D — novos vínculos financeiros exigirão departamento ativo. */
@@ -68,6 +73,40 @@ export class DepartamentosService {
         'Departamento inativo não pode receber novos vínculos financeiros',
       );
     }
+  }
+
+  /** Garante nome válido quando o service é usado fora do pipe HTTP (ex.: Bloco D). */
+  requireNome(nome: string | undefined | null): string {
+    if (nome === undefined || nome === null) {
+      throw new BadRequestException('Nome do departamento é obrigatório');
+    }
+    const trimmed = nome.trim();
+    if (!trimmed) {
+      throw new BadRequestException('Nome do departamento é obrigatório');
+    }
+    return trimmed;
+  }
+
+  private async saveDepartamento(entity: Departamento) {
+    try {
+      return await this.repo.save(entity);
+    } catch (err) {
+      if (this.isCodigoUniqueViolation(err)) {
+        throw new ConflictException('Código de departamento já em uso nesta empresa');
+      }
+      throw err;
+    }
+  }
+
+  private isCodigoUniqueViolation(err: unknown): boolean {
+    if (!(err instanceof QueryFailedError)) return false;
+    const pg = err.driverError as { code?: string; constraint?: string; detail?: string };
+    if (pg?.code !== '23505') return false;
+    const c = (pg.constraint ?? '').toLowerCase();
+    if (c.includes('departamentos') && c.includes('codigo')) return true;
+    if (c === 'uq_departamentos_empresa_codigo') return true;
+    const detail = pg.detail ?? '';
+    return detail.includes('departamentos') && detail.includes('codigo');
   }
 
   private async assertCodigoLivre(empresaId: string, codigo: string | undefined, ignoreId?: string) {

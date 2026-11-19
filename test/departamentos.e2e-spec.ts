@@ -129,6 +129,18 @@ describe('departamentos (e2e) — Bloco C', () => {
       .send({ codigo: 'SEM-NOME' });
     expect(semNome.status).toBe(400);
 
+    const nomeVazio = await request(app.getHttpServer())
+      .post('/v1/departamentos')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ codigo: 'NOME-VAZIO', nome: '' });
+    expect(nomeVazio.status).toBe(400);
+
+    const soEspacos = await request(app.getHttpServer())
+      .post('/v1/departamentos')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ codigo: 'NOME-ESP', nome: '   ' });
+    expect(soEspacos.status).toBe(400);
+
     const a = await request(app.getHttpServer())
       .post('/v1/departamentos')
       .set(authHeaders(masterToken, masterEmpresaId))
@@ -168,6 +180,56 @@ describe('departamentos (e2e) — Bloco C', () => {
       .set(authHeaders(masterToken, outraEmpresaId))
       .send({ codigo: 'DUP-1', nome: 'Dept outra empresa' });
     expect(mesmoCodigoOutraEmpresa.status).toBe(201);
+  });
+
+  it('duas requisições concorrentes com o mesmo código: uma 201 e outra 409 (índice único)', async () => {
+    const codigo = `RACE-${Date.now()}`;
+    const [r1, r2] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/v1/departamentos')
+        .set(authHeaders(masterToken, masterEmpresaId))
+        .send({ codigo, nome: 'Concorrência A' }),
+      request(app.getHttpServer())
+        .post('/v1/departamentos')
+        .set(authHeaders(masterToken, masterEmpresaId))
+        .send({ codigo, nome: 'Concorrência B' }),
+    ]);
+    const statuses = [r1.status, r2.status].sort((a, b) => a - b);
+    expect(statuses).toEqual([201, 409]);
+    const conflito = r1.status === 409 ? r1 : r2;
+    if (conflito.status === 409) {
+      expect(String(conflito.body.message)).toMatch(/código/i);
+    }
+  });
+
+  it('violação real da constraint única (insert SQL) → service devolve 409 via API PATCH', async () => {
+    const codigo = `SQL-UNQ-${Date.now()}`;
+    await dataSource.query(
+      `INSERT INTO departamentos (empresa_id, codigo, nome) VALUES ($1, $2, $3)`,
+      [masterEmpresaId, codigo, 'Via SQL'],
+    );
+    const criar = await request(app.getHttpServer())
+      .post('/v1/departamentos')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ codigo, nome: 'Via API' });
+    expect(criar.status).toBe(409);
+
+    const [rowA] = await dataSource.query(
+      `SELECT id FROM departamentos WHERE empresa_id = $1 AND codigo = $2 LIMIT 1`,
+      [masterEmpresaId, codigo],
+    );
+    const criarB = await request(app.getHttpServer())
+      .post('/v1/departamentos')
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ codigo: `OUTRO-${Date.now()}`, nome: 'Segundo' });
+    expect(criarB.status).toBe(201);
+    const patch = await request(app.getHttpServer())
+      .patch(`/v1/departamentos/${criarB.body.id}`)
+      .set(authHeaders(masterToken, masterEmpresaId))
+      .send({ codigo });
+    expect(patch.status).toBe(409);
+    expect(String(patch.body.message)).toMatch(/código/i);
+    expect(rowA.id).toBeDefined();
   });
 
   it('inativação preserva registro; reativar; filtro ativo=false', async () => {

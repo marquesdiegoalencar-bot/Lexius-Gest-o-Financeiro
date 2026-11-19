@@ -193,9 +193,12 @@ CREATE TABLE departamentos (
     descricao      TEXT,
     ativo          BOOLEAN NOT NULL DEFAULT TRUE,
     criado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (empresa_id, codigo)
+    atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE UNIQUE INDEX uq_departamentos_empresa_codigo
+  ON departamentos (empresa_id, codigo)
+  WHERE codigo IS NOT NULL;
 
 CREATE INDEX idx_departamentos_empresa_ativo ON departamentos (empresa_id, ativo);
 

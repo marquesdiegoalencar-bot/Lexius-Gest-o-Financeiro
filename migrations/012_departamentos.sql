@@ -1,7 +1,11 @@
 -- Bloco C: departamentos por empresa.
--- Rollback manual (após backup):
+--
+-- Rollback manual SOMENTE se a perda de todos os cadastros for aceita e NÃO existir FK de outras tabelas:
 --   DROP TABLE IF EXISTS departamentos;
--- Registros permanecem em histórico futuro via vínculos (Bloco D); não há DELETE físico na API.
+-- Esse DROP apaga irreversivelmente todos os departamentos. Após o Bloco D (vínculos em títulos etc.),
+-- o rollback simples não é aceitável: reverter exige migrations dedicadas que removam dependências
+-- antes de alterar a estrutura, sem apagar histórico financeiro inadvertidamente.
+-- Não há DELETE físico na API; inativação preserva linhas para consulta histórica.
 
 CREATE TABLE IF NOT EXISTS departamentos (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
