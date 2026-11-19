@@ -22,6 +22,7 @@ const nav = [
   { to: '/empresas', label: 'Empresas', icon: Building2 },
   { to: '/categorias', label: 'Categorias', icon: Tag },
   { to: '/centros-custo', label: 'Centros de Custo', icon: FolderTree },
+  { to: '/departamentos', label: 'Departamentos', icon: Building2 },
   { to: '/relatorios', label: 'Relatórios', icon: LineChart },
 ];
 

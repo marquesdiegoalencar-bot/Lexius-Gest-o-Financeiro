@@ -77,6 +77,7 @@ Corpo: ver `ESPECIFICACAO.md` §3.1.1.
         ├── pessoas/
         ├── categorias/
         ├── centros-custo/
+        ├── departamentos/
         ├── contas-bancarias/
         └── integracao-cobranca/
 ```

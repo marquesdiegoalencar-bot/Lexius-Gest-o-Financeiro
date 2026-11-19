@@ -185,6 +185,20 @@ CREATE TABLE centros_custo (
     FOREIGN KEY (empresa_id, pai_id) REFERENCES centros_custo (empresa_id, id)
 );
 
+CREATE TABLE departamentos (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id     UUID NOT NULL REFERENCES empresas(id),
+    codigo         VARCHAR(32),
+    nome           TEXT NOT NULL,
+    descricao      TEXT,
+    ativo          BOOLEAN NOT NULL DEFAULT TRUE,
+    criado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (empresa_id, codigo)
+);
+
+CREATE INDEX idx_departamentos_empresa_ativo ON departamentos (empresa_id, ativo);
+
 -- ---------------------------------------------------------------------
 -- ACORDOS DO LEXIUS COB (cópia somente-leitura, alimentada pelo COB)
 -- Espelha a tela "Acordos Realizados": código, devedor, credor, condições.

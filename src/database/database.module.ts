@@ -6,6 +6,7 @@ import { Auditoria } from './entities/auditoria.entity';
 import { Baixa } from './entities/baixa.entity';
 import { Categoria } from './entities/categoria.entity';
 import { CentroCusto } from './entities/centro-custo.entity';
+import { Departamento } from './entities/departamento.entity';
 import { CobrancaAcordo } from './entities/cobranca-acordo.entity';
 import { CobrancaBoleto } from './entities/cobranca-boleto.entity';
 import { CobrancaEmissaoPendente } from './entities/cobranca-emissao-pendente.entity';
@@ -37,6 +38,7 @@ const entities = [
   Pessoa,
   Categoria,
   CentroCusto,
+  Departamento,
   ContaBancaria,
   CobrancaAcordo,
   TituloReceber,

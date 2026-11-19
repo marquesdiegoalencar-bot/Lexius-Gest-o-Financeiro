@@ -14,13 +14,29 @@
 |---------|----------|
 | `010_centros_custo_hierarquia.sql` | Hierarquia centros de custo (Bloco B) |
 | `011_centros_custo_pai_empresa.sql` | FK composta pai/mesma empresa (correção Bloco B) |
-| `012_*` | Departamentos (Bloco C — futuro) |
+| `012_departamentos.sql` | Tabela `departamentos` por empresa (Bloco C) |
 | `013_*` | Títulos × departamento (Bloco D — futuro) |
 | `014_*` | Rateio e vigência (Bloco E — futuro) |
 | `015_*` | DRE (Bloco F — futuro) |
 | `016_*` | Orçamento (Bloco G — futuro) |
 
 Não renumerar migrations `001`–`011`. Novos blocos usam o próximo número livre.
+
+### `012_departamentos.sql` — aplicar / reverter
+
+**Aplicar** (banco existente, somente incremental):
+
+```bash
+psql "$DATABASE_URL" -f migrations/012_departamentos.sql
+```
+
+**Reverter** (remove somente a tabela; não há vínculos em títulos até o Bloco D):
+
+```sql
+DROP TABLE IF EXISTS departamentos;
+```
+
+E2E e `scripts/reset-db.js` já incluem `schema.sql` + migrations em ordem lexicográfica.
 
 ## Concorrência — ordem de bloqueio (centros de custo)
 

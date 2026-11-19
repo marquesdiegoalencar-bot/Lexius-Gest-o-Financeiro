@@ -16,6 +16,7 @@ import {
 } from '@/pages/modules';
 import { RelatoriosPage } from '@/pages/relatorios-page';
 import { CentrosCustoPage } from '@/pages/centros-custo-page';
+import { DepartamentosPage } from '@/pages/departamentos-page';
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -50,6 +51,11 @@ const router = createBrowserRouter([
             path: 'centros-custo',
             element: <CentrosCustoPage />,
             handle: { title: 'Centros de Custo' },
+          },
+          {
+            path: 'departamentos',
+            element: <DepartamentosPage />,
+            handle: { title: 'Departamentos' },
           },
           { path: 'relatorios', element: <RelatoriosPage />, handle: { title: 'Relatórios' } },
         ],
