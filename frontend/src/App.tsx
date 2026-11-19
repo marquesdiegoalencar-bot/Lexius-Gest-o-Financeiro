@@ -7,13 +7,13 @@ import { DashboardPage } from '@/pages/dashboard-page';
 import {
   BancosPage,
   CategoriasPage,
-  CentrosCustoPage,
   ContasPagarPage,
   ContasReceberPage,
   EmpresasPage,
   PessoasPage,
 } from '@/pages/modules';
 import { RelatoriosPage } from '@/pages/relatorios-page';
+import { CentrosCustoPage } from '@/pages/centros-custo-page';
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },

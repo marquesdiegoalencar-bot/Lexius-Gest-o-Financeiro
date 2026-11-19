@@ -2,7 +2,6 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   Building2,
-  FolderTree,
   Landmark,
   Tag,
   Users,
@@ -51,12 +50,6 @@ type EmpresaRow = Record<string, unknown> & {
   razaoSocial: string;
   cnpj: string;
   tipo: string;
-};
-
-type CentroRow = Record<string, unknown> & {
-  id: string;
-  nome: string;
-  ativo?: boolean;
 };
 
 const tituloColumns: ColumnDef<TituloRow>[] = [
@@ -326,29 +319,3 @@ export function CategoriasPage() {
   );
 }
 
-const centroColumns: ColumnDef<CentroRow>[] = [
-  { id: 'nome', header: 'Nome', cell: (r) => r.nome },
-  {
-    id: 'ativo',
-    header: 'Ativo',
-    cell: (r) => (r.ativo === false ? 'Não' : 'Sim'),
-  },
-];
-
-export function CentrosCustoPage() {
-  return (
-    <ApiResourcePage<CentroRow>
-      title="Centros de Custo"
-      description="Rateio e DRE por centro."
-      icon={FolderTree}
-      listPath="/v1/centros-custo"
-      columns={centroColumns}
-      create={{
-        path: '/v1/centros-custo',
-        submitLabel: 'Novo centro de custo',
-        fields: [{ key: 'nome', label: 'Nome', type: 'text', required: true }],
-        buildBody: (v) => ({ nome: v.nome }),
-      }}
-    />
-  );
-}

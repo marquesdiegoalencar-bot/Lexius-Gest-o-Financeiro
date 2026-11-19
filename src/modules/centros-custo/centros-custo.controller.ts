@@ -1,9 +1,11 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { RequirePapeis } from '../../common/decorators/papeis.decorator';
 import { PapelGuard } from '../../common/guards/papel.guard';
 import { PapelUsuario } from '../../database/enums';
 import { CentrosCustoService } from './centros-custo.service';
+import { TipoCentroCusto } from '../../database/enums';
 import { CreateCentroCustoDto } from './dto/create-centro-custo.dto';
+import { UpdateCentroCustoDto } from './dto/update-centro-custo.dto';
 
 @Controller('centros-custo')
 @UseGuards(PapelGuard)
@@ -18,8 +20,8 @@ export class CentrosCustoController {
     PapelUsuario.OPERADOR,
     PapelUsuario.CONSULTA,
   )
-  list(@Req() req: { empresaId: string }) {
-    return this.service.list(req.empresaId);
+  list(@Req() req: { empresaId: string }, @Query('tipo') tipo?: TipoCentroCusto) {
+    return this.service.list(req.empresaId, tipo);
   }
 
   @Get(':id')
@@ -38,5 +40,15 @@ export class CentrosCustoController {
   @RequirePapeis(PapelUsuario.MASTER, PapelUsuario.ADMIN, PapelUsuario.FINANCEIRO)
   create(@Req() req: { empresaId: string }, @Body() dto: CreateCentroCustoDto) {
     return this.service.create(req.empresaId, dto);
+  }
+
+  @Patch(':id')
+  @RequirePapeis(PapelUsuario.MASTER, PapelUsuario.ADMIN, PapelUsuario.FINANCEIRO)
+  update(
+    @Param('id') id: string,
+    @Req() req: { empresaId: string },
+    @Body() dto: UpdateCentroCustoDto,
+  ) {
+    return this.service.update(id, req.empresaId, dto);
   }
 }

@@ -23,6 +23,11 @@ export enum Natureza {
   DESPESA = 'DESPESA',
 }
 
+export enum TipoCentroCusto {
+  ENTRADA = 'ENTRADA',
+  SAIDA = 'SAIDA',
+}
+
 export enum ProvedorBancario {
   INTER = 'INTER',
   ASAAS = 'ASAAS',
