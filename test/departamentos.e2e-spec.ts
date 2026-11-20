@@ -12,6 +12,9 @@ import {
   E2E_OPERADOR_SENHA,
   login,
 } from './e2e-auth.helpers';
+import { cnpjE2e } from './e2e-cnpj.helpers';
+
+const CNPJ_EMPRESA_DUP = cnpjE2e('departamentos.dup-empresa');
 
 describe('departamentos (e2e) — Bloco C', () => {
   let app: INestApplication;
@@ -158,14 +161,15 @@ describe('departamentos (e2e) — Bloco C', () => {
     ]);
     const [empOutra] = await dataSource.query(
       `INSERT INTO empresas (tipo, razao_social, nome_fantasia, cnpj)
-       VALUES ('OUTRA', 'E2E Dup Empresa', 'Dup Emp', '88888888000188')
+       VALUES ('OUTRA', 'E2E Dup Empresa', 'Dup Emp', $1)
        ON CONFLICT DO NOTHING
        RETURNING id`,
+      [CNPJ_EMPRESA_DUP],
     );
     let outraEmpresaId = empOutra?.id as string | undefined;
     if (!outraEmpresaId) {
       const [row] = await dataSource.query(`SELECT id FROM empresas WHERE cnpj = $1`, [
-        '88888888000188',
+        CNPJ_EMPRESA_DUP,
       ]);
       outraEmpresaId = row.id as string;
     }

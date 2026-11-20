@@ -67,7 +67,12 @@ async function categoriaFields(
   request: ReturnType<typeof useApi>['request'],
   natureza: 'RECEITA' | 'DESPESA',
 ): Promise<CreateField[]> {
-  const cats = await request<{ id: string; nome: string }[]>(`/v1/categorias?natureza=${natureza}`);
+  const tipoCc = natureza === 'RECEITA' ? 'ENTRADA' : 'SAIDA';
+  const [cats, cc, dept] = await Promise.all([
+    request<{ id: string; nome: string }[]>(`/v1/categorias?natureza=${natureza}`),
+    request<{ id: string; nome: string }[]>(`/v1/centros-custo?tipo=${tipoCc}&ativo=true`),
+    request<{ id: string; nome: string }[]>(`/v1/departamentos?ativo=true`),
+  ]);
   return [
     { key: 'descricao', label: 'Descrição', type: 'text', required: true },
     { key: 'valor_original', label: 'Valor', type: 'number', required: true },
@@ -85,7 +90,31 @@ async function categoriaFields(
       required: true,
       options: cats.map((c) => ({ value: c.id, label: c.nome })),
     },
+    {
+      key: 'centro_custo_id',
+      label: 'Centro de custo (opcional)',
+      type: 'select',
+      options: [{ value: '', label: '—' }, ...cc.map((c) => ({ value: c.id, label: c.nome }))],
+    },
+    {
+      key: 'departamento_id',
+      label: 'Departamento (opcional)',
+      type: 'select',
+      options: [{ value: '', label: '—' }, ...dept.map((d) => ({ value: d.id, label: d.nome }))],
+    },
   ];
+}
+
+function tituloBody(v: Record<string, string>) {
+  const body: Record<string, unknown> = {
+    descricao: v.descricao,
+    valor_original: Number(v.valor_original),
+    data_vencimento: v.data_vencimento,
+    categoria_id: v.categoria_id,
+  };
+  if (v.centro_custo_id) body.centro_custo_id = v.centro_custo_id;
+  if (v.departamento_id) body.departamento_id = v.departamento_id;
+  return body;
 }
 
 export function ContasReceberPage() {
@@ -100,12 +129,7 @@ export function ContasReceberPage() {
         path: '/v1/titulos-receber',
         submitLabel: 'Novo título a receber',
         fields: (req) => categoriaFields(req, 'RECEITA'),
-        buildBody: (v) => ({
-          descricao: v.descricao,
-          valor_original: Number(v.valor_original),
-          data_vencimento: v.data_vencimento,
-          categoria_id: v.categoria_id,
-        }),
+        buildBody: tituloBody,
       }}
     />
   );
@@ -123,12 +147,7 @@ export function ContasPagarPage() {
         path: '/v1/titulos-pagar',
         submitLabel: 'Novo título a pagar',
         fields: (req) => categoriaFields(req, 'DESPESA'),
-        buildBody: (v) => ({
-          descricao: v.descricao,
-          valor_original: Number(v.valor_original),
-          data_vencimento: v.data_vencimento,
-          categoria_id: v.categoria_id,
-        }),
+        buildBody: tituloBody,
       }}
     />
   );

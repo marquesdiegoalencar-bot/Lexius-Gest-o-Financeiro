@@ -34,6 +34,14 @@ export class CreateRecorrenciaDto {
   conta_bancaria_id?: string;
 
   @IsOptional()
+  @IsUUID()
+  centro_custo_id?: string;
+
+  @IsOptional()
+  @IsUUID()
+  departamento_id?: string;
+
+  @IsOptional()
   @IsNumber()
   dia_vencimento?: number;
 

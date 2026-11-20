@@ -28,6 +28,7 @@ import {
   StatusTitulo,
 } from '../../database/enums';
 import { CobRetornoService } from '../integracao-cobranca-retorno/cob-retorno.service';
+import { RateioBaixaService } from '../rateio/rateio-baixa.service';
 import { BaixarTituloDto } from './dto/baixar-titulo.dto';
 import { EstornarBaixaDto } from './dto/estornar-baixa.dto';
 
@@ -37,6 +38,7 @@ export class BaixasService {
     private dataSource: DataSource,
     private auditoria: AuditoriaService,
     private cobRetorno: CobRetornoService,
+    private rateioBaixa: RateioBaixaService,
     @InjectRepository(Baixa) private baixas: Repository<Baixa>,
     @InjectRepository(TituloReceber) private titulosReceber: Repository<TituloReceber>,
     @InjectRepository(TituloPagar) private titulosPagar: Repository<TituloPagar>,
@@ -272,6 +274,8 @@ export class BaixasService {
       aplicarBaixaReceber(titulo, valorLiquido, dto.data_baixa, opcoes?.valorCreditadoTitulo);
       await manager.save(titulo);
 
+      await this.rateioBaixa.criarAposBaixa(manager, baixa, titulo);
+
       await this.auditoria.registrar({
         empresaId,
         usuarioId: usuarioId ?? undefined,
@@ -353,6 +357,8 @@ export class BaixasService {
       aplicarBaixaPagar(titulo, valorLiquido, dto.data_baixa);
       await manager.save(titulo);
 
+      await this.rateioBaixa.criarAposBaixa(manager, baixa, titulo);
+
       await this.auditoria.registrar({
         empresaId,
         usuarioId,
@@ -417,6 +423,7 @@ export class BaixasService {
       }
 
       await this.estornarMovimentosBaixa(manager, baixa);
+      await this.rateioBaixa.criarEstornoAlocacao(manager, baixa);
 
       baixa.estornada = true;
       baixa.estornadaEm = new Date();

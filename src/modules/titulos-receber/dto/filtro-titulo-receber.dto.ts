@@ -25,4 +25,12 @@ export class FiltroTituloReceberDto {
   @IsOptional()
   @IsEnum(OrigemTitulo)
   origem?: OrigemTitulo;
+
+  @IsOptional()
+  @IsUUID()
+  departamento_id?: string;
+
+  @IsOptional()
+  @IsUUID()
+  centro_custo_id?: string;
 }

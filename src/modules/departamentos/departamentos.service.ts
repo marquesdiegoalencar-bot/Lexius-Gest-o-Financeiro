@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { EntityManager, QueryFailedError, Repository } from 'typeorm';
 import { Departamento } from '../../database/entities/departamento.entity';
 import { CreateDepartamentoDto } from './dto/create-departamento.dto';
 import { FiltroDepartamentoDto } from './dto/filtro-departamento.dto';
@@ -68,6 +68,23 @@ export class DepartamentosService {
     departamentoId: string,
   ): Promise<void> {
     const d = await this.findOne(departamentoId, empresaId);
+    if (!d.ativo) {
+      throw new ConflictException(
+        'Departamento inativo não pode receber novos vínculos financeiros',
+      );
+    }
+  }
+
+  async assertVinculoFinanceiroTx(
+    manager: EntityManager,
+    empresaId: string,
+    departamentoId: string,
+  ): Promise<void> {
+    const d = await manager.findOne(Departamento, {
+      where: { id: departamentoId, empresaId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!d) throw new NotFoundException('Departamento não encontrado');
     if (!d.ativo) {
       throw new ConflictException(
         'Departamento inativo não pode receber novos vínculos financeiros',

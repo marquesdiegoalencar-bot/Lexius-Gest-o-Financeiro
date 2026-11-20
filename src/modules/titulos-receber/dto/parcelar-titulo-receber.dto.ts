@@ -47,6 +47,10 @@ export class ParcelarTituloReceberDto {
 
   @IsOptional()
   @IsUUID()
+  departamento_id?: string;
+
+  @IsOptional()
+  @IsUUID()
   conta_bancaria_id?: string;
 
   @IsOptional()

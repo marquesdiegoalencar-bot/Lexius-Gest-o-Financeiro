@@ -3,10 +3,12 @@ import {
   CreateDateColumn,
   Entity,
   PrimaryGeneratedColumn,
+  Unique,
   UpdateDateColumn,
 } from 'typeorm';
 
 @Entity('departamentos')
+@Unique(['empresaId', 'id'])
 export class Departamento {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

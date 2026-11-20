@@ -30,6 +30,9 @@ export class TituloPagar {
   @Column({ name: 'centro_custo_id', type: 'uuid', nullable: true })
   centroCustoId!: string | null;
 
+  @Column({ name: 'departamento_id', type: 'uuid', nullable: true })
+  departamentoId!: string | null;
+
   @Column({ name: 'conta_bancaria_id', type: 'uuid', nullable: true })
   contaBancariaId!: string | null;
 

@@ -35,6 +35,9 @@ export class TituloReceber {
   @Column({ name: 'centro_custo_id', type: 'uuid', nullable: true })
   centroCustoId!: string | null;
 
+  @Column({ name: 'departamento_id', type: 'uuid', nullable: true })
+  departamentoId!: string | null;
+
   @Column({ name: 'conta_bancaria_id', type: 'uuid', nullable: true })
   contaBancariaId!: string | null;
 
@@ -61,6 +64,9 @@ export class TituloReceber {
 
   @Column({ name: 'grupo_parcelas_id', type: 'uuid', nullable: true })
   grupoParcelasId!: string | null;
+
+  @Column({ name: 'recorrencia_id', type: 'uuid', nullable: true })
+  recorrenciaId!: string | null;
 
   @Column({ name: 'valor_original', type: 'numeric', precision: 14, scale: 2 })
   valorOriginal!: string;

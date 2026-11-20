@@ -2,7 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { CobrancasModule } from '../cobrancas/cobrancas.module';
-import { CentrosCustoModule } from '../centros-custo/centros-custo.module';
+import { FinanceiroDimensoesModule } from '../../common/financeiro/financeiro-dimensoes.module';
+import { RateioModule } from '../rateio/rateio.module';
 import { TituloReceber } from '../../database/entities/titulo-receber.entity';
 import { TitulosReceberController } from './titulos-receber.controller';
 import { TitulosReceberService } from './titulos-receber.service';
@@ -12,7 +13,8 @@ import { TitulosReceberService } from './titulos-receber.service';
     TypeOrmModule.forFeature([TituloReceber]),
     AuthModule,
     CobrancasModule,
-    CentrosCustoModule,
+    FinanceiroDimensoesModule,
+    RateioModule,
   ],
   controllers: [TitulosReceberController],
   providers: [TitulosReceberService],

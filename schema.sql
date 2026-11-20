@@ -27,6 +27,11 @@ CREATE TYPE status_pagamento_bancario AS ENUM ('RASCUNHO','AGUARDANDO_APROVACAO'
 CREATE TYPE status_repasse      AS ENUM ('RASCUNHO','CALCULADO','AGUARDANDO_APROVACAO','APROVADO','PAGO','CANCELADO');
 CREATE TYPE tipo_pessoa         AS ENUM ('FISICA','JURIDICA');
 CREATE TYPE papel_usuario       AS ENUM ('MASTER','ADMIN','FINANCEIRO','OPERADOR','CONSULTA');
+CREATE TYPE modo_rateio         AS ENUM ('PERCENTUAL','VALOR_FIXO');
+CREATE TYPE status_titulo_alocacao AS ENUM ('RASCUNHO','CONFIRMADO','SUPERSEDED','CANCELADO');
+CREATE TYPE origem_titulo_rateio_vigencia AS ENUM ('LEGADO','CONFIRMACAO');
+CREATE TYPE tipo_baixa_alocacao AS ENUM ('BAIXA','ESTORNO');
+CREATE TYPE status_orcamento_versao AS ENUM ('RASCUNHO','APROVADO','FECHADO','SUPERSEDED','CANCELADO');
 
 -- ---------------------------------------------------------------------
 -- EMPRESAS, USUÁRIOS E PERMISSÕES
@@ -38,6 +43,7 @@ CREATE TABLE empresas (
     nome_fantasia TEXT,
     cnpj          VARCHAR(14) NOT NULL UNIQUE,
     ativa         BOOLEAN NOT NULL DEFAULT TRUE,
+    fuso_negocio  TEXT NOT NULL DEFAULT 'America/Manaus',
     criada_em     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -193,7 +199,8 @@ CREATE TABLE departamentos (
     descricao      TEXT,
     ativo          BOOLEAN NOT NULL DEFAULT TRUE,
     criado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+    atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (empresa_id, id)
 );
 
 CREATE UNIQUE INDEX uq_departamentos_empresa_codigo
@@ -239,7 +246,8 @@ CREATE TABLE titulos_receber (
     pessoa_id     UUID REFERENCES pessoas(id),           -- quem paga (devedor/cliente)
     credor_id     UUID REFERENCES pessoas(id),           -- credor dono do crédito (cobrança)
     categoria_id  UUID NOT NULL REFERENCES categorias(id),  -- Recebimento Cliente / Serviços / Cobrança Jurídica...
-    centro_custo_id UUID REFERENCES centros_custo(id),
+    centro_custo_id UUID,
+    departamento_id UUID,
     conta_bancaria_id UUID REFERENCES contas_bancarias(id), -- conta de entrada prevista
     origem        origem_titulo NOT NULL DEFAULT 'MANUAL',
     -- vínculo com o sistema de cobrança
@@ -250,6 +258,7 @@ CREATE TABLE titulos_receber (
     parcela_numero SMALLINT NOT NULL DEFAULT 1,  -- entrada = 0; parcelas 1..N
     parcela_total  SMALLINT NOT NULL DEFAULT 1,
     grupo_parcelas_id UUID,
+    recorrencia_id UUID,
     valor_original NUMERIC(14,2) NOT NULL CHECK (valor_original > 0),
     desconto       NUMERIC(14,2) NOT NULL DEFAULT 0,
     juros          NUMERIC(14,2) NOT NULL DEFAULT 0,
@@ -266,11 +275,22 @@ CREATE TABLE titulos_receber (
     criado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
     atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- idempotência: a mesma parcela do COB nunca gera dois títulos
-    UNIQUE (empresa_id, cobranca_parcela_id)
+    UNIQUE (empresa_id, cobranca_parcela_id),
+    FOREIGN KEY (empresa_id, departamento_id) REFERENCES departamentos (empresa_id, id),
+    FOREIGN KEY (empresa_id, centro_custo_id) REFERENCES centros_custo (empresa_id, id)
 );
 CREATE INDEX idx_tr_venc    ON titulos_receber(empresa_id, status, data_vencimento);
 CREATE INDEX idx_tr_pessoa  ON titulos_receber(pessoa_id);
 CREATE INDEX idx_tr_credor  ON titulos_receber(credor_id);
+CREATE INDEX idx_tr_empresa_departamento ON titulos_receber (empresa_id, departamento_id)
+  WHERE departamento_id IS NOT NULL;
+CREATE INDEX idx_tr_empresa_centro_custo ON titulos_receber (empresa_id, centro_custo_id)
+  WHERE centro_custo_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_tr_recorrencia_vencimento
+  ON titulos_receber (empresa_id, recorrencia_id, data_vencimento)
+  WHERE recorrencia_id IS NOT NULL;
+CREATE INDEX idx_tr_competencia_empresa ON titulos_receber (empresa_id, data_competencia)
+  WHERE data_competencia IS NOT NULL;
 
 -- ---------------------------------------------------------------------
 -- TÍTULOS A PAGAR
@@ -282,7 +302,8 @@ CREATE TABLE titulos_pagar (
     descricao     TEXT NOT NULL,
     fornecedor_id UUID REFERENCES pessoas(id),            -- fornecedor, advogado, colaborador, órgão
     categoria_id  UUID NOT NULL REFERENCES categorias(id),   -- Despesas escritório / sistema / advogado / taxas e impostos / salário / outros
-    centro_custo_id UUID REFERENCES centros_custo(id),
+    centro_custo_id UUID,
+    departamento_id UUID,
     conta_bancaria_id UUID REFERENCES contas_bancarias(id),  -- conta de saída prevista
     origem        origem_titulo NOT NULL DEFAULT 'MANUAL',
     recorrencia_id UUID,
@@ -311,9 +332,17 @@ CREATE TABLE titulos_pagar (
     rejeitado_motivo TEXT,
     criado_por     UUID REFERENCES usuarios(id),
     criado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+    atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    FOREIGN KEY (empresa_id, departamento_id) REFERENCES departamentos (empresa_id, id),
+    FOREIGN KEY (empresa_id, centro_custo_id) REFERENCES centros_custo (empresa_id, id)
 );
 CREATE INDEX idx_tp_venc ON titulos_pagar(empresa_id, status, data_vencimento);
+CREATE INDEX idx_tp_empresa_departamento ON titulos_pagar (empresa_id, departamento_id)
+  WHERE departamento_id IS NOT NULL;
+CREATE INDEX idx_tp_empresa_centro_custo ON titulos_pagar (empresa_id, centro_custo_id)
+  WHERE centro_custo_id IS NOT NULL;
+CREATE INDEX idx_tp_competencia_empresa ON titulos_pagar (empresa_id, data_competencia)
+  WHERE data_competencia IS NOT NULL;
 
 CREATE TABLE recorrencias (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -323,14 +352,27 @@ CREATE TABLE recorrencias (
     pessoa_id     UUID REFERENCES pessoas(id),
     categoria_id  UUID NOT NULL REFERENCES categorias(id),
     conta_bancaria_id UUID REFERENCES contas_bancarias(id),
+    departamento_id UUID,
+    centro_custo_id UUID,
     valor         NUMERIC(14,2) NOT NULL,
     frequencia    TEXT NOT NULL,                          -- MENSAL, SEMANAL, ANUAL...
     dia_vencimento SMALLINT,
     inicio        DATE NOT NULL,
     fim           DATE,
     gerar_antecedencia_dias SMALLINT NOT NULL DEFAULT 30,
-    ativa         BOOLEAN NOT NULL DEFAULT TRUE
+    ativa         BOOLEAN NOT NULL DEFAULT TRUE,
+    FOREIGN KEY (empresa_id, departamento_id) REFERENCES departamentos (empresa_id, id),
+    FOREIGN KEY (empresa_id, centro_custo_id) REFERENCES centros_custo (empresa_id, id)
 );
+
+CREATE INDEX idx_rec_empresa_departamento ON recorrencias (empresa_id, departamento_id)
+  WHERE departamento_id IS NOT NULL;
+CREATE INDEX idx_rec_empresa_centro_custo ON recorrencias (empresa_id, centro_custo_id)
+  WHERE centro_custo_id IS NOT NULL;
+
+ALTER TABLE titulos_receber
+  ADD CONSTRAINT titulos_receber_recorrencia_id_fkey
+  FOREIGN KEY (recorrencia_id) REFERENCES recorrencias(id);
 
 -- ---------------------------------------------------------------------
 -- LANÇAMENTOS ESPELHADOS ENTRE AS EMPRESAS DO GRUPO
@@ -409,6 +451,202 @@ CREATE TABLE baixas (
 );
 CREATE INDEX idx_baixas_tr ON baixas(titulo_receber_id);
 CREATE INDEX idx_baixas_tp ON baixas(titulo_pagar_id);
+CREATE INDEX idx_baixas_empresa_data_ativa ON baixas (empresa_id, data_baixa)
+  WHERE estornada = FALSE;
+
+-- ---------------------------------------------------------------------
+-- RATEIO E VIGÊNCIA (Bloco E)
+-- ---------------------------------------------------------------------
+CREATE TABLE titulo_alocacao_definicao (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id           UUID NOT NULL REFERENCES empresas(id),
+    titulo_receber_id    UUID REFERENCES titulos_receber(id),
+    titulo_pagar_id      UUID REFERENCES titulos_pagar(id),
+    modo                 modo_rateio NOT NULL DEFAULT 'PERCENTUAL',
+    status               status_titulo_alocacao NOT NULL DEFAULT 'RASCUNHO',
+    criado_em            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    atualizado_em        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (
+      (titulo_receber_id IS NOT NULL)::int + (titulo_pagar_id IS NOT NULL)::int = 1
+    )
+);
+
+CREATE INDEX idx_tad_empresa_tr
+  ON titulo_alocacao_definicao (empresa_id, titulo_receber_id)
+  WHERE titulo_receber_id IS NOT NULL;
+CREATE INDEX idx_tad_empresa_tp
+  ON titulo_alocacao_definicao (empresa_id, titulo_pagar_id)
+  WHERE titulo_pagar_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_tad_rascunho_tr
+  ON titulo_alocacao_definicao (empresa_id, titulo_receber_id)
+  WHERE titulo_receber_id IS NOT NULL AND status = 'RASCUNHO';
+CREATE UNIQUE INDEX uq_tad_rascunho_tp
+  ON titulo_alocacao_definicao (empresa_id, titulo_pagar_id)
+  WHERE titulo_pagar_id IS NOT NULL AND status = 'RASCUNHO';
+CREATE UNIQUE INDEX uq_tad_confirmado_tr
+  ON titulo_alocacao_definicao (empresa_id, titulo_receber_id)
+  WHERE titulo_receber_id IS NOT NULL AND status = 'CONFIRMADO';
+CREATE UNIQUE INDEX uq_tad_confirmado_tp
+  ON titulo_alocacao_definicao (empresa_id, titulo_pagar_id)
+  WHERE titulo_pagar_id IS NOT NULL AND status = 'CONFIRMADO';
+
+CREATE TABLE titulo_alocacao_item (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    definicao_id      UUID NOT NULL REFERENCES titulo_alocacao_definicao(id) ON DELETE CASCADE,
+    empresa_id        UUID NOT NULL REFERENCES empresas(id),
+    linha             SMALLINT NOT NULL CHECK (linha > 0),
+    centro_custo_id   UUID,
+    departamento_id   UUID,
+    percentual        NUMERIC(9,4),
+    valor             NUMERIC(14,2),
+    criado_em         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    FOREIGN KEY (empresa_id, centro_custo_id) REFERENCES centros_custo (empresa_id, id),
+    FOREIGN KEY (empresa_id, departamento_id) REFERENCES departamentos (empresa_id, id),
+    CHECK (centro_custo_id IS NOT NULL OR departamento_id IS NOT NULL),
+    CHECK (
+      (percentual IS NOT NULL AND valor IS NULL)
+      OR (percentual IS NULL AND valor IS NOT NULL)
+    ),
+    UNIQUE (definicao_id, linha)
+);
+
+CREATE TABLE titulo_rateio_vigencia (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id         UUID NOT NULL REFERENCES empresas(id),
+    titulo_receber_id  UUID REFERENCES titulos_receber(id),
+    titulo_pagar_id    UUID REFERENCES titulos_pagar(id),
+    definicao_id       UUID REFERENCES titulo_alocacao_definicao(id),
+    origem             origem_titulo_rateio_vigencia NOT NULL,
+    modo               modo_rateio NOT NULL DEFAULT 'PERCENTUAL',
+    valido_de          TIMESTAMPTZ NOT NULL,
+    valido_ate         TIMESTAMPTZ,
+    criado_em          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (
+      (titulo_receber_id IS NOT NULL)::int + (titulo_pagar_id IS NOT NULL)::int = 1
+    ),
+    CHECK (valido_ate IS NULL OR valido_ate > valido_de)
+);
+
+CREATE INDEX idx_trv_empresa_tr
+  ON titulo_rateio_vigencia (empresa_id, titulo_receber_id, valido_de DESC)
+  WHERE titulo_receber_id IS NOT NULL;
+CREATE INDEX idx_trv_empresa_tp
+  ON titulo_rateio_vigencia (empresa_id, titulo_pagar_id, valido_de DESC)
+  WHERE titulo_pagar_id IS NOT NULL;
+
+CREATE TABLE titulo_rateio_vigencia_item (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    vigencia_id       UUID NOT NULL REFERENCES titulo_rateio_vigencia(id) ON DELETE CASCADE,
+    empresa_id        UUID NOT NULL REFERENCES empresas(id),
+    linha             SMALLINT NOT NULL CHECK (linha > 0),
+    centro_custo_id   UUID,
+    departamento_id   UUID,
+    percentual        NUMERIC(9,4),
+    valor             NUMERIC(14,2),
+    FOREIGN KEY (empresa_id, centro_custo_id) REFERENCES centros_custo (empresa_id, id),
+    FOREIGN KEY (empresa_id, departamento_id) REFERENCES departamentos (empresa_id, id),
+    CHECK (centro_custo_id IS NOT NULL OR departamento_id IS NOT NULL),
+    UNIQUE (vigencia_id, linha)
+);
+
+CREATE TABLE baixa_alocacao_item (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id          UUID NOT NULL REFERENCES empresas(id),
+    baixa_id            UUID NOT NULL REFERENCES baixas(id),
+    tipo                tipo_baixa_alocacao NOT NULL DEFAULT 'BAIXA',
+    linha               SMALLINT NOT NULL CHECK (linha > 0),
+    centro_custo_id     UUID,
+    departamento_id     UUID,
+    valor               NUMERIC(14,2) NOT NULL,
+    percentual_ref      NUMERIC(9,4),
+    vigencia_id         UUID REFERENCES titulo_rateio_vigencia(id),
+    estorno_de_id       UUID REFERENCES baixa_alocacao_item(id),
+    criado_em           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    FOREIGN KEY (empresa_id, centro_custo_id) REFERENCES centros_custo (empresa_id, id),
+    FOREIGN KEY (empresa_id, departamento_id) REFERENCES departamentos (empresa_id, id),
+    CHECK (centro_custo_id IS NOT NULL OR departamento_id IS NOT NULL),
+    UNIQUE (baixa_id, tipo, linha)
+);
+
+CREATE INDEX idx_bai_baixa ON baixa_alocacao_item (baixa_id);
+CREATE INDEX idx_bai_empresa ON baixa_alocacao_item (empresa_id);
+CREATE INDEX idx_bai_empresa_centro
+  ON baixa_alocacao_item (empresa_id, centro_custo_id)
+  WHERE centro_custo_id IS NOT NULL;
+CREATE INDEX idx_bai_empresa_departamento
+  ON baixa_alocacao_item (empresa_id, departamento_id)
+  WHERE departamento_id IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION trg_titulo_rateio_vigencia_no_overlap()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  conflito INT;
+  fim_novo TIMESTAMPTZ;
+BEGIN
+  fim_novo := COALESCE(NEW.valido_ate, 'infinity'::timestamptz);
+  SELECT COUNT(*) INTO conflito
+  FROM titulo_rateio_vigencia v
+  WHERE v.empresa_id = NEW.empresa_id
+    AND v.id IS DISTINCT FROM NEW.id
+    AND (
+      (NEW.titulo_receber_id IS NOT NULL AND v.titulo_receber_id = NEW.titulo_receber_id)
+      OR (NEW.titulo_pagar_id IS NOT NULL AND v.titulo_pagar_id = NEW.titulo_pagar_id)
+    )
+    AND tstzrange(v.valido_de, COALESCE(v.valido_ate, 'infinity'::timestamptz), '[)')
+        && tstzrange(NEW.valido_de, fim_novo, '[)');
+  IF conflito > 0 THEN
+    RAISE EXCEPTION 'Vigência de rateio sobrepõe vigência existente para o mesmo título';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_titulo_rateio_vigencia_no_overlap
+  BEFORE INSERT OR UPDATE OF valido_de, valido_ate, titulo_receber_id, titulo_pagar_id, empresa_id
+  ON titulo_rateio_vigencia
+  FOR EACH ROW
+  EXECUTE PROCEDURE trg_titulo_rateio_vigencia_no_overlap();
+
+-- ---------------------------------------------------------------------
+-- ORÇAMENTO (Bloco G)
+-- ---------------------------------------------------------------------
+CREATE TABLE orcamento_versao (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id      UUID NOT NULL REFERENCES empresas(id),
+    ano             SMALLINT NOT NULL CHECK (ano >= 2000 AND ano <= 2100),
+    mes             SMALLINT NOT NULL CHECK (mes BETWEEN 1 AND 12),
+    nome            TEXT,
+    status          status_orcamento_versao NOT NULL DEFAULT 'RASCUNHO',
+    criado_em       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    atualizado_em   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (empresa_id, ano, mes, nome)
+);
+
+CREATE INDEX idx_orc_versao_empresa_periodo
+  ON orcamento_versao (empresa_id, ano, mes, status);
+
+CREATE TABLE orcamento_item (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    versao_id         UUID NOT NULL REFERENCES orcamento_versao(id) ON DELETE CASCADE,
+    empresa_id        UUID NOT NULL REFERENCES empresas(id),
+    categoria_id      UUID NOT NULL REFERENCES categorias(id),
+    centro_custo_id   UUID,
+    departamento_id   UUID,
+    valor_previsto    NUMERIC(14,2) NOT NULL CHECK (valor_previsto >= 0),
+    criado_em         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    atualizado_em     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    FOREIGN KEY (empresa_id, centro_custo_id) REFERENCES centros_custo (empresa_id, id),
+    FOREIGN KEY (empresa_id, departamento_id) REFERENCES departamentos (empresa_id, id)
+);
+
+CREATE UNIQUE INDEX uq_orc_item_folha
+  ON orcamento_item (versao_id, categoria_id, centro_custo_id, departamento_id)
+  NULLS NOT DISTINCT;
+
+CREATE INDEX idx_orc_item_versao ON orcamento_item (versao_id);
+CREATE INDEX idx_orc_item_empresa_cat ON orcamento_item (empresa_id, categoria_id);
 
 -- ---------------------------------------------------------------------
 -- COBRANÇAS EMITIDAS NO BANCO (boleto / boleto+Pix / Pix)

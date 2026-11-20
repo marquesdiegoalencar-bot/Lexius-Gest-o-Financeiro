@@ -3,19 +3,21 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AuditoriaService } from '../../common/auditoria/auditoria.service';
+import { FinanceiroDimensoesService } from '../../common/financeiro/financeiro-dimensoes.service';
 import { toMoneyString } from '../../common/utils/money';
 import { TituloReceber } from '../../database/entities/titulo-receber.entity';
 import { OrigemTitulo, StatusTitulo } from '../../database/enums';
+import { RateioService } from '../rateio/rateio.service';
 import { CreateTituloReceberDto } from './dto/create-titulo-receber.dto';
 import { FiltroTituloReceberDto } from './dto/filtro-titulo-receber.dto';
 import { ParcelarTituloReceberDto } from './dto/parcelar-titulo-receber.dto';
-import { CentrosCustoService } from '../centros-custo/centros-custo.service';
 
 @Injectable()
 export class TitulosReceberService {
   constructor(
     private auditoria: AuditoriaService,
-    private centrosCusto: CentrosCustoService,
+    private financeiroDimensoes: FinanceiroDimensoesService,
+    private rateio: RateioService,
     private dataSource: DataSource,
     @InjectRepository(TituloReceber) private repo: Repository<TituloReceber>,
   ) {}
@@ -32,6 +34,12 @@ export class TitulosReceberService {
     if (filtros.pessoa_id) qb.andWhere('t.pessoa_id = :pessoaId', { pessoaId: filtros.pessoa_id });
     if (filtros.categoria_id) qb.andWhere('t.categoria_id = :categoriaId', { categoriaId: filtros.categoria_id });
     if (filtros.origem) qb.andWhere('t.origem = :origem', { origem: filtros.origem });
+    if (filtros.departamento_id) {
+      qb.andWhere('t.departamento_id = :departamentoId', { departamentoId: filtros.departamento_id });
+    }
+    if (filtros.centro_custo_id) {
+      qb.andWhere('t.centro_custo_id = :centroCustoId', { centroCustoId: filtros.centro_custo_id });
+    }
     return qb.getMany();
   }
 
@@ -42,7 +50,7 @@ export class TitulosReceberService {
   }
 
   async createManual(empresaId: string, usuarioId: string, dto: CreateTituloReceberDto) {
-    const titulo = dto.centro_custo_id
+    const titulo = this.financeiroDimensoes.precisaTransacao(dto)
       ? await this.dataSource.transaction((manager) =>
           this.criarTituloReceberManual(manager, empresaId, usuarioId, dto),
         )
@@ -65,10 +73,8 @@ export class TitulosReceberService {
     usuarioId: string,
     dto: CreateTituloReceberDto,
   ) {
-    if (dto.centro_custo_id) {
-      await this.centrosCusto.assertVinculoFinanceiroTx(manager, empresaId, dto.centro_custo_id);
-    }
-    return manager.save(
+    await this.financeiroDimensoes.assertNovosVinculosTx(manager, empresaId, dto);
+    const titulo = await manager.save(
       TituloReceber,
       manager.create(TituloReceber, {
         empresaId,
@@ -77,20 +83,29 @@ export class TitulosReceberService {
         credorId: dto.credor_id ?? null,
         categoriaId: dto.categoria_id,
         centroCustoId: dto.centro_custo_id ?? null,
+        departamentoId: dto.departamento_id ?? null,
         contaBancariaId: dto.conta_bancaria_id ?? null,
         origem: OrigemTitulo.MANUAL,
         valorOriginal: toMoneyString(dto.valor_original),
         dataVencimento: dto.data_vencimento,
-        dataCompetencia: dto.data_competencia ?? null,
+        dataCompetencia: dto.data_competencia ?? dto.data_vencimento,
         formaPrevista: dto.forma_prevista ?? null,
         observacao: dto.observacao ?? null,
         criadoPor: usuarioId,
       }),
     );
+    await this.rateio.registrarVigenciaLegadoTx(manager, {
+      empresaId,
+      receberId: titulo.id,
+      centroCustoId: titulo.centroCustoId,
+      departamentoId: titulo.departamentoId,
+      dataReferencia: titulo.dataCompetencia ?? titulo.dataEmissao ?? titulo.dataVencimento,
+    });
+    return titulo;
   }
 
   async parcelar(empresaId: string, usuarioId: string, dto: ParcelarTituloReceberDto) {
-    const resultado = dto.centro_custo_id
+    const resultado = this.financeiroDimensoes.precisaTransacao(dto)
       ? await this.dataSource.transaction((manager) =>
           this.parcelarEmTransacao(manager, empresaId, usuarioId, dto),
         )
@@ -104,9 +119,7 @@ export class TitulosReceberService {
     usuarioId: string,
     dto: ParcelarTituloReceberDto,
   ) {
-    if (dto.centro_custo_id) {
-      await this.centrosCusto.assertVinculoFinanceiroTx(manager, empresaId, dto.centro_custo_id);
-    }
+    await this.financeiroDimensoes.assertNovosVinculosTx(manager, empresaId, dto);
     const grupoId = randomUUID();
     const total = dto.parcelas.length;
     const titulos: TituloReceber[] = [];
@@ -121,6 +134,7 @@ export class TitulosReceberService {
           credorId: dto.credor_id ?? null,
           categoriaId: dto.categoria_id,
           centroCustoId: dto.centro_custo_id ?? null,
+          departamentoId: dto.departamento_id ?? null,
           contaBancariaId: dto.conta_bancaria_id ?? null,
           origem: OrigemTitulo.MANUAL,
           grupoParcelasId: grupoId,
@@ -133,6 +147,13 @@ export class TitulosReceberService {
           criadoPor: usuarioId,
         }),
       );
+      await this.rateio.registrarVigenciaLegadoTx(manager, {
+        empresaId,
+        receberId: titulo.id,
+        centroCustoId: titulo.centroCustoId,
+        departamentoId: titulo.departamentoId,
+        dataReferencia: titulo.dataCompetencia ?? titulo.dataEmissao ?? titulo.dataVencimento,
+      });
       titulos.push(titulo);
     }
     return { grupo_parcelas_id: grupoId, titulos };

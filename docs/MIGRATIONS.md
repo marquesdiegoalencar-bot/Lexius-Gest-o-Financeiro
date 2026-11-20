@@ -15,12 +15,42 @@
 | `010_centros_custo_hierarquia.sql` | Hierarquia centros de custo (Bloco B) |
 | `011_centros_custo_pai_empresa.sql` | FK composta pai/mesma empresa (correção Bloco B) |
 | `012_departamentos.sql` | Tabela `departamentos` por empresa (Bloco C) |
-| `013_*` | Títulos × departamento (Bloco D — futuro) |
-| `014_*` | Rateio e vigência (Bloco E — futuro) |
-| `015_*` | DRE (Bloco F — futuro) |
-| `016_*` | Orçamento (Bloco G — futuro) |
+| `013_titulos_dimensoes_empresa.sql` | `departamento_id` / CC em títulos e recorrências; FKs compostas (Bloco D.1) |
+| `014_rateio_vigencia.sql` | Rateio, vigências, `baixa_alocacao_item`, `recorrencia_id` em títulos a receber (Bloco E) |
+| `015_dre_indices.sql` | Índices competência/caixa para DRE (Bloco F) |
+| `016_orcamento.sql` | `orcamento_versao` / `orcamento_item` (Bloco G) |
+| `017_corretivas_dg_vigencia_estados.sql` | TIMESTAMPTZ vigência `[)` **por `empresas.fuso_negocio`**, enums, índices |
+| `018_corretiva_vigencia_fuso_por_empresa.sql` | **Deprecado** — no-op na cadeia; não usar em produção (ver `docs/OPERACAO-MIGRACAO-VIGENCIA-FUSO.md`) |
+| `019_vigencia_fuso_aprovacao_estrutura.sql` | Tabela/view de aprovação (etapa preparatória; **sem** UPDATE em vigências) |
+| `020_corretiva_vigencia_legado_fuso_exec.sql` | Execução corretiva **restrita** após snapshots completos na tabela de aprovação |
 
 Não renumerar migrations `001`–`011`. Novos blocos usam o próximo número livre.
+
+### `017_corretivas_dg_vigencia_estados.sql` — aplicar / reverter
+
+**Aplicar** (banco com 014–016):
+
+```bash
+psql "$DATABASE_URL" -f migrations/017_corretivas_dg_vigencia_estados.sql
+```
+
+Converte vigências DATE → TIMESTAMPTZ usando **início do dia civil no `fuso_negocio` de cada linha** (`JOIN` via `empresa_id`; fallback `America/Manaus`), atualiza trigger, índices.
+
+### `018_corretiva_vigencia_fuso_por_empresa.sql`
+
+**Não aplicar em produção** como correção ativa: o arquivo atual é **no-op** (compatibilidade de numeração). A versão histórica com UPDATE cego por assinatura `-04` foi substituída pela **019** + pré-flight.
+
+### `019_vigencia_fuso_aprovacao_estrutura.sql` — aplicar (preparatório)
+
+Cria `lexius_mig_vigencia_fuso_aprovacao` e `lexius_vigencia_elegivel_correcao_fuso`. **Não** altera vigências. Em banco incremental: aplicar **antes** de popular aprovação.
+
+### `020_corretiva_vigencia_legado_fuso_exec.sql` — aplicar (correção)
+
+Somente após **pré-flight**, **`019` aplicada** e snapshots em `scripts/sql/populate-aprovacao-vigencia-fuso.sql` (ou INSERT equivalente). Exige conjunto de IDs = elegíveis e instantes/fuso/origem/empresa inalterados desde a aprovação. Guia: `docs/OPERACAO-MIGRACAO-VIGENCIA-FUSO.md`.
+
+### Migrations SQL vs TypeORM
+
+Migrations numeradas em `migrations/*.sql` são aplicadas por `scripts/migrate.js` e `scripts/reset-db.js` (ordem lexicográfica, **transação por arquivo**). O `TypeOrmModule` **não** registra `migrations` nem `migrationsTransactionMode`; runtime Nest usa `synchronize` apenas quando `DB_SYNC_SCHEMA=true` (e2e usa schema.sql + SQL incremental).
 
 ### `012_departamentos.sql` — aplicar / reverter
 
@@ -43,6 +73,46 @@ DROP TABLE IF EXISTS departamentos;
 ```
 
 E2E e `scripts/reset-db.js` recriam o schema completo (`schema.sql` + migrations em ordem lexicográfica) e **não** dependem deste `DROP` manual.
+
+### `014_rateio_vigencia.sql` — aplicar / reverter
+
+**Aplicar** (banco existente com 001–013):
+
+```bash
+psql "$DATABASE_URL" -f migrations/014_rateio_vigencia.sql
+```
+
+Executa backfill **LEGADO** (vigência 100% com centro/departamento do título). Rollback: comentário no topo do arquivo.
+
+### `015_dre_indices.sql` — aplicar / reverter
+
+```bash
+psql "$DATABASE_URL" -f migrations/015_dre_indices.sql
+```
+
+Somente índices; rollback = `DROP INDEX` listados no arquivo.
+
+### `016_orcamento.sql` — aplicar / reverter
+
+```bash
+psql "$DATABASE_URL" -f migrations/016_orcamento.sql
+```
+
+Rollback destrói versões e itens de orçamento — ver comentário no arquivo.
+
+### `013_titulos_dimensoes_empresa.sql` — aplicar / reverter
+
+**Aplicar** (banco existente com 001–012 já aplicados):
+
+```bash
+psql "$DATABASE_URL" -f migrations/013_titulos_dimensoes_empresa.sql
+```
+
+A migration é **transacional** e executa **pré-checks** em `centro_custo_id` dos títulos (órfãos ou empresa divergente). Se falhar, **não altera** a estrutura — corrija os dados e reaplique.
+
+**Reverter** (remove colunas e FKs; **não** apaga `departamentos` nem dados históricos em títulos além das colunas novas):
+
+Ver comentário de rollback no topo de `migrations/013_titulos_dimensoes_empresa.sql`. Após D.1+, o `DROP TABLE departamentos` da doc 012 permanece **proibido** em ambientes com histórico.
 
 ## Concorrência — ordem de bloqueio (centros de custo)
 

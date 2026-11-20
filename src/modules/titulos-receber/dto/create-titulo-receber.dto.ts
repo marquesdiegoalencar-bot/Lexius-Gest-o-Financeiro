@@ -37,6 +37,10 @@ export class CreateTituloReceberDto {
 
   @IsOptional()
   @IsUUID()
+  departamento_id?: string;
+
+  @IsOptional()
+  @IsUUID()
   conta_bancaria_id?: string;
 
   @IsOptional()

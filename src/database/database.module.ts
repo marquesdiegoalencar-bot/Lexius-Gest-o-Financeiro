@@ -3,7 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Anexo } from './entities/anexo.entity';
 import { Auditoria } from './entities/auditoria.entity';
+import { OrcamentoItem } from './entities/orcamento-item.entity';
+import { OrcamentoVersao } from './entities/orcamento-versao.entity';
+import { TituloAlocacaoDefinicao } from './entities/titulo-alocacao-definicao.entity';
+import { TituloAlocacaoItem } from './entities/titulo-alocacao-item.entity';
+import { TituloRateioVigencia } from './entities/titulo-rateio-vigencia.entity';
+import { TituloRateioVigenciaItem } from './entities/titulo-rateio-vigencia-item.entity';
 import { Baixa } from './entities/baixa.entity';
+import { BaixaAlocacaoItem } from './entities/baixa-alocacao-item.entity';
 import { Categoria } from './entities/categoria.entity';
 import { CentroCusto } from './entities/centro-custo.entity';
 import { Departamento } from './entities/departamento.entity';
@@ -44,6 +51,13 @@ const entities = [
   TituloReceber,
   TituloPagar,
   Baixa,
+  BaixaAlocacaoItem,
+  TituloAlocacaoDefinicao,
+  TituloAlocacaoItem,
+  TituloRateioVigencia,
+  TituloRateioVigenciaItem,
+  OrcamentoVersao,
+  OrcamentoItem,
   MovimentoBancario,
   Recorrencia,
   Anexo,

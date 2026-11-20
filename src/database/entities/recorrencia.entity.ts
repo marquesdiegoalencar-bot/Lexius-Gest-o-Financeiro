@@ -24,6 +24,12 @@ export class Recorrencia {
   @Column({ name: 'conta_bancaria_id', type: 'uuid', nullable: true })
   contaBancariaId!: string | null;
 
+  @Column({ name: 'departamento_id', type: 'uuid', nullable: true })
+  departamentoId!: string | null;
+
+  @Column({ name: 'centro_custo_id', type: 'uuid', nullable: true })
+  centroCustoId!: string | null;
+
   @Column({ type: 'numeric', precision: 14, scale: 2 })
   valor!: string;
 

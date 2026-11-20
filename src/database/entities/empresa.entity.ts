@@ -28,6 +28,9 @@ export class Empresa {
   @Column({ default: true })
   ativa!: boolean;
 
+  @Column({ name: 'fuso_negocio', type: 'text', default: 'America/Manaus' })
+  fusoNegocio!: string;
+
   @CreateDateColumn({ name: 'criada_em', type: 'timestamptz' })
   criadaEm!: Date;
 

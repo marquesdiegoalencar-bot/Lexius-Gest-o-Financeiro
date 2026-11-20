@@ -138,6 +138,36 @@ export enum StatusAprovacaoTituloPagar {
   REJEITADO = 'REJEITADO',
 }
 
+export enum ModoRateio {
+  PERCENTUAL = 'PERCENTUAL',
+  VALOR_FIXO = 'VALOR_FIXO',
+}
+
+export enum StatusTituloAlocacao {
+  RASCUNHO = 'RASCUNHO',
+  CONFIRMADO = 'CONFIRMADO',
+  SUPERSEDED = 'SUPERSEDED',
+  CANCELADO = 'CANCELADO',
+}
+
+export enum OrigemTituloRateioVigencia {
+  LEGADO = 'LEGADO',
+  CONFIRMACAO = 'CONFIRMACAO',
+}
+
+export enum TipoBaixaAlocacao {
+  BAIXA = 'BAIXA',
+  ESTORNO = 'ESTORNO',
+}
+
+export enum StatusOrcamentoVersao {
+  RASCUNHO = 'RASCUNHO',
+  APROVADO = 'APROVADO',
+  FECHADO = 'FECHADO',
+  SUPERSEDED = 'SUPERSEDED',
+  CANCELADO = 'CANCELADO',
+}
+
 export enum StatusCobranca {
   EMITIDA = 'EMITIDA',
   REGISTRADA = 'REGISTRADA',

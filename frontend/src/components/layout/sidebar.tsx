@@ -24,6 +24,7 @@ const nav = [
   { to: '/centros-custo', label: 'Centros de Custo', icon: FolderTree },
   { to: '/departamentos', label: 'Departamentos', icon: Building2 },
   { to: '/relatorios', label: 'Relatórios', icon: LineChart },
+  { to: '/rateio-orcamento', label: 'Rateio / Orçamento', icon: Wallet },
 ];
 
 export function Sidebar() {

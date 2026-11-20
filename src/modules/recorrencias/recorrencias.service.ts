@@ -1,11 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { FinanceiroDimensoesService } from '../../common/financeiro/financeiro-dimensoes.service';
 import { toMoneyString } from '../../common/utils/money';
 import { Recorrencia } from '../../database/entities/recorrencia.entity';
 import { TituloPagar } from '../../database/entities/titulo-pagar.entity';
 import { TituloReceber } from '../../database/entities/titulo-receber.entity';
 import { Natureza, OrigemTitulo } from '../../database/enums';
+import { RateioService } from '../rateio/rateio.service';
 import { CreateRecorrenciaDto } from './dto/create-recorrencia.dto';
 
 function addMonths(date: Date, months: number): Date {
@@ -36,6 +38,9 @@ function proximoVencimento(rec: Recorrencia, aPartirDe: Date): Date | null {
 @Injectable()
 export class RecorrenciasService {
   constructor(
+    private dataSource: DataSource,
+    private financeiroDimensoes: FinanceiroDimensoesService,
+    private rateio: RateioService,
     @InjectRepository(Recorrencia) private repo: Repository<Recorrencia>,
     @InjectRepository(TituloReceber) private titulosReceber: Repository<TituloReceber>,
     @InjectRepository(TituloPagar) private titulosPagar: Repository<TituloPagar>,
@@ -51,24 +56,55 @@ export class RecorrenciasService {
     return r;
   }
 
-  create(empresaId: string, dto: CreateRecorrenciaDto) {
-    return this.repo.save(
-      this.repo.create({
-        empresaId,
-        natureza: dto.natureza,
-        descricao: dto.descricao,
-        pessoaId: dto.pessoa_id ?? null,
-        categoriaId: dto.categoria_id,
-        contaBancariaId: dto.conta_bancaria_id ?? null,
-        valor: toMoneyString(dto.valor),
-        frequencia: dto.frequencia,
-        diaVencimento: dto.dia_vencimento ?? null,
-        inicio: dto.inicio,
-        fim: dto.fim ?? null,
-        gerarAntecedenciaDias: dto.gerar_antecedencia_dias ?? 30,
-        ativa: dto.ativa ?? true,
-      }),
-    );
+  async create(empresaId: string, dto: CreateRecorrenciaDto) {
+    const dims = {
+      centro_custo_id: dto.centro_custo_id,
+      departamento_id: dto.departamento_id,
+    };
+    if (!this.financeiroDimensoes.precisaTransacao(dims)) {
+      return this.repo.save(
+        this.repo.create({
+          empresaId,
+          natureza: dto.natureza,
+          descricao: dto.descricao,
+          pessoaId: dto.pessoa_id ?? null,
+          categoriaId: dto.categoria_id,
+          contaBancariaId: dto.conta_bancaria_id ?? null,
+          centroCustoId: dto.centro_custo_id ?? null,
+          departamentoId: dto.departamento_id ?? null,
+          valor: toMoneyString(dto.valor),
+          frequencia: dto.frequencia,
+          diaVencimento: dto.dia_vencimento ?? null,
+          inicio: dto.inicio,
+          fim: dto.fim ?? null,
+          gerarAntecedenciaDias: dto.gerar_antecedencia_dias ?? 30,
+          ativa: dto.ativa ?? true,
+        }),
+      );
+    }
+    return this.dataSource.transaction(async (manager) => {
+      await this.financeiroDimensoes.assertNovosVinculosTx(manager, empresaId, dims);
+      return manager.save(
+        Recorrencia,
+        manager.create(Recorrencia, {
+          empresaId,
+          natureza: dto.natureza,
+          descricao: dto.descricao,
+          pessoaId: dto.pessoa_id ?? null,
+          categoriaId: dto.categoria_id,
+          contaBancariaId: dto.conta_bancaria_id ?? null,
+          centroCustoId: dto.centro_custo_id ?? null,
+          departamentoId: dto.departamento_id ?? null,
+          valor: toMoneyString(dto.valor),
+          frequencia: dto.frequencia,
+          diaVencimento: dto.dia_vencimento ?? null,
+          inicio: dto.inicio,
+          fim: dto.fim ?? null,
+          gerarAntecedenciaDias: dto.gerar_antecedencia_dias ?? 30,
+          ativa: dto.ativa ?? true,
+        }),
+      );
+    });
   }
 
   async gerar(id: string, empresaId: string, usuarioId: string) {
@@ -99,54 +135,81 @@ export class RecorrenciasService {
     const dataVenc = venc.toISOString().slice(0, 10);
     const descricao = `${rec.descricao} (recorrência)`;
 
-    if (rec.natureza === Natureza.RECEITA) {
-      const existente = await this.titulosReceber
-        .createQueryBuilder('t')
+    return this.dataSource.transaction(async (manager) => {
+      await this.financeiroDimensoes.assertNovosVinculosTx(manager, empresaId, {
+        centro_custo_id: rec.centroCustoId,
+        departamento_id: rec.departamentoId,
+      });
+
+      if (rec.natureza === Natureza.RECEITA) {
+        const existente = await manager
+          .createQueryBuilder(TituloReceber, 't')
+          .where('t.empresa_id = :empresaId', { empresaId })
+          .andWhere('t.recorrencia_id = :recId', { recId: rec.id })
+          .andWhere('t.data_vencimento = :dataVenc', { dataVenc })
+          .getOne();
+        if (existente) return { titulos: [existente], duplicado: true };
+
+        const titulo = await manager.save(
+          TituloReceber,
+          manager.create(TituloReceber, {
+            empresaId,
+            descricao,
+            pessoaId: rec.pessoaId,
+            categoriaId: rec.categoriaId,
+            centroCustoId: rec.centroCustoId,
+            departamentoId: rec.departamentoId,
+            contaBancariaId: rec.contaBancariaId,
+            recorrenciaId: rec.id,
+            origem: OrigemTitulo.RECORRENCIA,
+            valorOriginal: rec.valor,
+            dataVencimento: dataVenc,
+            criadoPor: usuarioId,
+          }),
+        );
+        await this.rateio.registrarVigenciaLegadoTx(manager, {
+          empresaId,
+          receberId: titulo.id,
+          centroCustoId: titulo.centroCustoId,
+          departamentoId: titulo.departamentoId,
+          dataReferencia: titulo.dataCompetencia ?? titulo.dataEmissao ?? titulo.dataVencimento,
+        });
+        return { titulos: [titulo] };
+      }
+
+      const existente = await manager
+        .createQueryBuilder(TituloPagar, 't')
         .where('t.empresa_id = :empresaId', { empresaId })
-        .andWhere('t.origem = :origem', { origem: OrigemTitulo.RECORRENCIA })
+        .andWhere('t.recorrencia_id = :recId', { recId: rec.id })
         .andWhere('t.data_vencimento = :dataVenc', { dataVenc })
-        .andWhere('t.descricao = :descricao', { descricao })
         .getOne();
       if (existente) return { titulos: [existente], duplicado: true };
 
-      const titulo = await this.titulosReceber.save(
-        this.titulosReceber.create({
+      const titulo = await manager.save(
+        TituloPagar,
+        manager.create(TituloPagar, {
           empresaId,
           descricao,
-          pessoaId: rec.pessoaId,
+          fornecedorId: rec.pessoaId,
           categoriaId: rec.categoriaId,
+          centroCustoId: rec.centroCustoId,
+          departamentoId: rec.departamentoId,
           contaBancariaId: rec.contaBancariaId,
+          recorrenciaId: rec.id,
           origem: OrigemTitulo.RECORRENCIA,
           valorOriginal: rec.valor,
           dataVencimento: dataVenc,
           criadoPor: usuarioId,
         }),
       );
-      return { titulos: [titulo] };
-    }
-
-    const existente = await this.titulosPagar
-      .createQueryBuilder('t')
-      .where('t.empresa_id = :empresaId', { empresaId })
-      .andWhere('t.recorrencia_id = :recId', { recId: rec.id })
-      .andWhere('t.data_vencimento = :dataVenc', { dataVenc })
-      .getOne();
-    if (existente) return { titulos: [existente], duplicado: true };
-
-    const titulo = await this.titulosPagar.save(
-      this.titulosPagar.create({
+      await this.rateio.registrarVigenciaLegadoTx(manager, {
         empresaId,
-        descricao,
-        fornecedorId: rec.pessoaId,
-        categoriaId: rec.categoriaId,
-        contaBancariaId: rec.contaBancariaId,
-        recorrenciaId: rec.id,
-        origem: OrigemTitulo.RECORRENCIA,
-        valorOriginal: rec.valor,
-        dataVencimento: dataVenc,
-        criadoPor: usuarioId,
-      }),
-    );
-    return { titulos: [titulo] };
+        pagarId: titulo.id,
+        centroCustoId: titulo.centroCustoId,
+        departamentoId: titulo.departamentoId,
+        dataReferencia: titulo.dataCompetencia ?? titulo.dataEmissao ?? titulo.dataVencimento,
+      });
+      return { titulos: [titulo] };
+    });
   }
 }

@@ -9,13 +9,15 @@ import { OrigemTitulo, StatusAprovacaoTituloPagar, StatusTitulo } from '../../da
 import { CreateTituloPagarDto } from './dto/create-titulo-pagar.dto';
 import { FiltroTituloPagarDto } from './dto/filtro-titulo-pagar.dto';
 import { RejeitarTituloPagarDto } from './dto/rejeitar-titulo-pagar.dto';
-import { CentrosCustoService } from '../centros-custo/centros-custo.service';
+import { FinanceiroDimensoesService } from '../../common/financeiro/financeiro-dimensoes.service';
+import { RateioService } from '../rateio/rateio.service';
 
 @Injectable()
 export class TitulosPagarService {
   constructor(
     private auditoria: AuditoriaService,
-    private centrosCusto: CentrosCustoService,
+    private financeiroDimensoes: FinanceiroDimensoesService,
+    private rateio: RateioService,
     private dataSource: DataSource,
     @InjectRepository(TituloPagar) private repo: Repository<TituloPagar>,
   ) {}
@@ -32,6 +34,12 @@ export class TitulosPagarService {
     if (filtros.pessoa_id) qb.andWhere('t.fornecedor_id = :fornecedorId', { fornecedorId: filtros.pessoa_id });
     if (filtros.categoria_id) qb.andWhere('t.categoria_id = :categoriaId', { categoriaId: filtros.categoria_id });
     if (filtros.origem) qb.andWhere('t.origem = :origem', { origem: filtros.origem });
+    if (filtros.departamento_id) {
+      qb.andWhere('t.departamento_id = :departamentoId', { departamentoId: filtros.departamento_id });
+    }
+    if (filtros.centro_custo_id) {
+      qb.andWhere('t.centro_custo_id = :centroCustoId', { centroCustoId: filtros.centro_custo_id });
+    }
     return qb.getMany();
   }
 
@@ -42,10 +50,8 @@ export class TitulosPagarService {
   }
 
   async create(empresaId: string, usuarioId: string, dto: CreateTituloPagarDto) {
-    const comCentro = !!dto.centro_custo_id;
-
     if (dto.parcelas?.length) {
-      const resultado = comCentro
+      const resultado = this.financeiroDimensoes.precisaTransacao(dto)
         ? await this.dataSource.transaction((manager) =>
             this.criarParcelado(manager, empresaId, usuarioId, dto),
           )
@@ -57,7 +63,7 @@ export class TitulosPagarService {
       throw new BadRequestException('descricao, valor_original e data_vencimento são obrigatórios');
     }
 
-    const titulo = comCentro
+    const titulo = this.financeiroDimensoes.precisaTransacao(dto)
       ? await this.dataSource.transaction((manager) =>
           this.criarTituloPagarAvulso(manager, empresaId, usuarioId, dto),
         )
@@ -80,9 +86,7 @@ export class TitulosPagarService {
     usuarioId: string,
     dto: CreateTituloPagarDto,
   ) {
-    if (dto.centro_custo_id) {
-      await this.centrosCusto.assertVinculoFinanceiroTx(manager, empresaId, dto.centro_custo_id);
-    }
+    await this.financeiroDimensoes.assertNovosVinculosTx(manager, empresaId, dto);
     const grupoId = randomUUID();
     const total = dto.parcelas!.length;
     const titulos: TituloPagar[] = [];
@@ -96,6 +100,7 @@ export class TitulosPagarService {
           fornecedorId: dto.fornecedor_id ?? null,
           categoriaId: dto.categoria_id,
           centroCustoId: dto.centro_custo_id ?? null,
+          departamentoId: dto.departamento_id ?? null,
           contaBancariaId: dto.conta_bancaria_id ?? null,
           recorrenciaId: dto.recorrencia_id ?? null,
           origem: dto.recorrencia_id ? OrigemTitulo.RECORRENCIA : OrigemTitulo.MANUAL,
@@ -109,6 +114,13 @@ export class TitulosPagarService {
           criadoPor: usuarioId,
         }),
       );
+      await this.rateio.registrarVigenciaLegadoTx(manager, {
+        empresaId,
+        pagarId: titulo.id,
+        centroCustoId: titulo.centroCustoId,
+        departamentoId: titulo.departamentoId,
+        dataReferencia: titulo.dataCompetencia ?? titulo.dataEmissao ?? titulo.dataVencimento,
+      });
       titulos.push(titulo);
     }
     return { grupo_parcelas_id: grupoId, titulos };
@@ -120,10 +132,8 @@ export class TitulosPagarService {
     usuarioId: string,
     dto: CreateTituloPagarDto,
   ) {
-    if (dto.centro_custo_id) {
-      await this.centrosCusto.assertVinculoFinanceiroTx(manager, empresaId, dto.centro_custo_id);
-    }
-    return manager.save(
+    await this.financeiroDimensoes.assertNovosVinculosTx(manager, empresaId, dto);
+    const titulo = await manager.save(
       TituloPagar,
       manager.create(TituloPagar, {
         empresaId,
@@ -131,17 +141,26 @@ export class TitulosPagarService {
         fornecedorId: dto.fornecedor_id ?? null,
         categoriaId: dto.categoria_id,
         centroCustoId: dto.centro_custo_id ?? null,
+        departamentoId: dto.departamento_id ?? null,
         contaBancariaId: dto.conta_bancaria_id ?? null,
         recorrenciaId: dto.recorrencia_id ?? null,
         origem: dto.recorrencia_id ? OrigemTitulo.RECORRENCIA : OrigemTitulo.MANUAL,
         valorOriginal: toMoneyString(dto.valor_original!),
         dataVencimento: dto.data_vencimento!,
-        dataCompetencia: dto.data_competencia ?? null,
+        dataCompetencia: dto.data_competencia ?? dto.data_vencimento ?? null,
         formaPrevista: dto.forma_prevista ?? null,
         observacao: dto.observacao ?? null,
         criadoPor: usuarioId,
       }),
     );
+    await this.rateio.registrarVigenciaLegadoTx(manager, {
+      empresaId,
+      pagarId: titulo.id,
+      centroCustoId: titulo.centroCustoId,
+      departamentoId: titulo.departamentoId,
+      dataReferencia: titulo.dataCompetencia ?? titulo.dataEmissao ?? titulo.dataVencimento,
+    });
+    return titulo;
   }
 
   async aprovar(id: string, empresaId: string, usuarioId: string) {

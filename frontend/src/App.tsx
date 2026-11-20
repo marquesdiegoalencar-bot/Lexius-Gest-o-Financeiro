@@ -15,6 +15,7 @@ import {
   PessoasPage,
 } from '@/pages/modules';
 import { RelatoriosPage } from '@/pages/relatorios-page';
+import { FinanceiroDgPage } from '@/pages/financeiro-dg-page';
 import { CentrosCustoPage } from '@/pages/centros-custo-page';
 import { DepartamentosPage } from '@/pages/departamentos-page';
 
@@ -58,6 +59,11 @@ const router = createBrowserRouter([
             handle: { title: 'Departamentos' },
           },
           { path: 'relatorios', element: <RelatoriosPage />, handle: { title: 'Relatórios' } },
+          {
+            path: 'rateio-orcamento',
+            element: <FinanceiroDgPage />,
+            handle: { title: 'Rateio e Orçamento' },
+          },
         ],
       },
     ],
