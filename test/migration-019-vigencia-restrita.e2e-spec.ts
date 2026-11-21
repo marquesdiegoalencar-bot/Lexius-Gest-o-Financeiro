@@ -261,7 +261,6 @@ describe('migration 019 — vigência fuso restrita (e2e)', () => {
     await inserirAprovacaoVigencia(dataSource, vid);
     await execMig020(dataSource);
     const [corrigido] = await dataSource.query(`SELECT valido_de FROM titulo_rateio_vigencia WHERE id = $1`, [vid]);
-    await dataSource.query(`TRUNCATE lexius_mig_vigencia_fuso_aprovacao`);
     await execMig020(dataSource);
     const [depois] = await dataSource.query(`SELECT valido_de FROM titulo_rateio_vigencia WHERE id = $1`, [vid]);
     expect(new Date(depois.valido_de).toISOString()).toBe(new Date(corrigido.valido_de).toISOString());

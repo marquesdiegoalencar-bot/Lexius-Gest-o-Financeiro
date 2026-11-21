@@ -12,7 +12,8 @@ import {
   inserirAprovacaoTodosElegiveis,
   inserirAprovacaoVigencia,
   MIG019_ESTRUTURA,
-  MIG020_EXEC,
+  MIG019A_TRILHA,
+  MIG021_EXEC,
 } from './mig-vigencia-fuso-e2e.helpers';
 
 const CIVIL = '2033-09-01';
@@ -40,7 +41,7 @@ describe('auditoria migration 020 — snapshots e integridade (e2e)', () => {
       `SELECT COUNT(*)::int AS n FROM lexius_vigencia_elegivel_correcao_fuso`,
     );
     if (n > 0) {
-      await dataSource.query(MIG020_EXEC).catch(() => dataSource.query('ROLLBACK'));
+      await dataSource.query(MIG021_EXEC).catch(() => dataSource.query('ROLLBACK'));
     }
     await dataSource.query(`TRUNCATE lexius_mig_vigencia_fuso_aprovacao`);
   });
@@ -74,6 +75,7 @@ describe('auditoria migration 020 — snapshots e integridade (e2e)', () => {
     await dataSource.query(`DROP TABLE IF EXISTS lexius_mig_vigencia_fuso_aprovacao CASCADE`);
     await execMig020(dataSource, { expectEstruturaAusente: true });
     await dataSource.query(MIG019_ESTRUTURA);
+    await dataSource.query(MIG019A_TRILHA);
   });
 
   it('aprovação incompleta — somente vigencia_id', async () => {
@@ -83,20 +85,26 @@ describe('auditoria migration 020 — snapshots e integridade (e2e)', () => {
     await execMig020(dataSource, { expectAprovacaoIncompleta: true });
   });
 
-  it('aprovações órfãs — elegível corrigido mas snapshot permanece', async () => {
+  it('após conclusão, segunda 020 idempotente (trilha com correcao_aplicada_em)', async () => {
     const { vid } = await legadoSp('orfas');
-    await dataSource.query(`TRUNCATE lexius_mig_vigencia_fuso_aprovacao`);
+    await dataSource.query(
+      `DELETE FROM lexius_mig_vigencia_fuso_aprovacao WHERE correcao_aplicada_em IS NULL`,
+    );
     await inserirAprovacaoVigencia(dataSource, vid);
-    await dataSource.query(MIG020_EXEC);
-    await execMig020(dataSource, { expectAprovacoesOrfas: true });
-    await dataSource.query(`TRUNCATE lexius_mig_vigencia_fuso_aprovacao`);
+    await dataSource.query(MIG021_EXEC);
+    await dataSource.query(MIG021_EXEC);
+    const [{ ts }] = await dataSource.query(
+      `SELECT correcao_aplicada_em AS ts FROM lexius_mig_vigencia_fuso_aprovacao WHERE vigencia_id = $1`,
+      [vid],
+    );
+    expect(ts).toBeTruthy();
   });
 
   it('alteração de fuso após aprovação', async () => {
     const { vid, emp } = await legadoSp('fuso');
     await inserirAprovacaoVigencia(dataSource, vid);
     await dataSource.query(`UPDATE empresas SET fuso_negocio = 'America/Manaus' WHERE id = $1`, [emp]);
-    await expect(dataSource.query(MIG020_EXEC)).rejects.toMatchObject({
+    await expect(dataSource.query(MIG021_EXEC)).rejects.toMatchObject({
       message: expect.stringMatching(/Divergência|órfãs/i),
     });
     await dataSource.query('ROLLBACK').catch(() => undefined);
@@ -113,7 +121,7 @@ describe('auditoria migration 020 — snapshots e integridade (e2e)', () => {
     );
     await inserirAprovacaoVigencia(dataSource, vid);
     await dataSource.query(`UPDATE titulo_rateio_vigencia SET empresa_id = $1 WHERE id = $2`, [outra.id, vid]);
-    await expect(dataSource.query(MIG020_EXEC)).rejects.toMatchObject({
+    await expect(dataSource.query(MIG021_EXEC)).rejects.toMatchObject({
       message: expect.stringMatching(/Divergência|órfãs/i),
     });
     await dataSource.query('ROLLBACK').catch(() => undefined);
@@ -128,7 +136,7 @@ describe('auditoria migration 020 — snapshots e integridade (e2e)', () => {
       `UPDATE titulo_rateio_vigencia SET origem = 'CONFIRMACAO' WHERE id = $1`,
       [vid],
     );
-    await expect(dataSource.query(MIG020_EXEC)).rejects.toMatchObject({
+    await expect(dataSource.query(MIG021_EXEC)).rejects.toMatchObject({
       message: expect.stringMatching(/Divergência|órfãs/i),
     });
     await dataSource.query('ROLLBACK').catch(() => undefined);
@@ -166,7 +174,7 @@ describe('auditoria migration 020 — snapshots e integridade (e2e)', () => {
     const [{ bai }] = await dataSource.query(`SELECT COUNT(*)::int AS bai FROM baixa_alocacao_item`);
     await dataSource.query(`TRUNCATE lexius_mig_vigencia_fuso_aprovacao`);
     await inserirAprovacaoTodosElegiveis(dataSource);
-    await dataSource.query(MIG020_EXEC);
+    await dataSource.query(MIG021_EXEC);
     const [{ bai: baiDepois }] = await dataSource.query(`SELECT COUNT(*)::int AS bai FROM baixa_alocacao_item`);
     expect(baiDepois).toBe(bai);
     const [{ count }] = await dataSource.query(

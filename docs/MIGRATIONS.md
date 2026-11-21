@@ -22,7 +22,9 @@
 | `017_corretivas_dg_vigencia_estados.sql` | TIMESTAMPTZ vigência `[)` **por `empresas.fuso_negocio`**, enums, índices |
 | `018_corretiva_vigencia_fuso_por_empresa.sql` | **Deprecado** — no-op na cadeia; não usar em produção (ver `docs/OPERACAO-MIGRACAO-VIGENCIA-FUSO.md`) |
 | `019_vigencia_fuso_aprovacao_estrutura.sql` | Tabela/view de aprovação (etapa preparatória; **sem** UPDATE em vigências) |
-| `020_corretiva_vigencia_legado_fuso_exec.sql` | Execução corretiva **restrita** após snapshots completos na tabela de aprovação |
+| `019a_vigencia_fuso_aprovacao_trilha.sql` | **Incremental:** `correcao_aplicada_em`, `lote_execucao` + backfill conservador (bancos com 019≠b5dcbdb+trilha) |
+| `020_corretiva_vigencia_legado_fuso_exec.sql` | Execução corretiva **publicada (b5dcbdb)** — **congelada**; não alterar conteúdo |
+| `021_corretiva_vigencia_legado_fuso_idempotente.sql` | Execução idempotente + trilha; usar **operacionalmente** após populate |
 
 Não renumerar migrations `001`–`011`. Novos blocos usam o próximo número livre.
 
@@ -44,9 +46,28 @@ Converte vigências DATE → TIMESTAMPTZ usando **início do dia civil no `fuso_
 
 Cria `lexius_mig_vigencia_fuso_aprovacao` e `lexius_vigencia_elegivel_correcao_fuso`. **Não** altera vigências. Em banco incremental: aplicar **antes** de popular aprovação.
 
-### `020_corretiva_vigencia_legado_fuso_exec.sql` — aplicar (correção)
+### `019a_vigencia_fuso_aprovacao_trilha.sql` — aplicar (incremental)
 
-Somente após **pré-flight**, **`019` aplicada** e snapshots em `scripts/sql/populate-aprovacao-vigencia-fuso.sql` (ou INSERT equivalente). Exige conjunto de IDs = elegíveis e instantes/fuso/origem/empresa inalterados desde a aprovação. Guia: `docs/OPERACAO-MIGRACAO-VIGENCIA-FUSO.md`.
+**Obrigatória** antes da **021** operacional:
+
+- Bancos que aplicaram **`019` publicada (ex.: b5dcbdb)** sem `correcao_aplicada_em`.
+- Bancos novos via `reset-db`: aplicada automaticamente **entre** 019 e 020.
+
+Não modifica vigências. Backfill: marca linhas já corrigidas (vigência = destino aprovado, fora da view elegível).
+
+### `020_corretiva_vigencia_legado_fuso_exec.sql` — artefato publicado (não reexecutar em upgrade)
+
+Versão fixa em **b5dcbdb**. **Não** há registro de “já executada” no banco; em ambientes que rodaram esse SQL manualmente, **não** reaplique o arquivo ao atualizar o repositório — use **019a** + **021**.
+
+### `021_corretiva_vigencia_legado_fuso_idempotente.sql` — correção operacional
+
+Somente após **019**, **019a**, **pré-flight** e `populate-aprovacao-vigencia-fuso.sql`:
+
+```bash
+psql "$DATABASE_URL" -f migrations/021_corretiva_vigencia_legado_fuso_idempotente.sql
+```
+
+Pode ser executada quantas vezes forem necessárias (idempotência por `correcao_aplicada_em`). Guia: `docs/OPERACAO-MIGRACAO-VIGENCIA-FUSO.md`.
 
 ### Migrations SQL vs TypeORM
 

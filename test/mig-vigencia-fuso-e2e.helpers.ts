@@ -6,8 +6,21 @@ export const MIG019_ESTRUTURA = readFileSync(
   join(__dirname, '..', 'migrations', '019_vigencia_fuso_aprovacao_estrutura.sql'),
   'utf8',
 );
+export const MIG019A_TRILHA = readFileSync(
+  join(__dirname, '..', 'migrations', '019a_vigencia_fuso_aprovacao_trilha.sql'),
+  'utf8',
+);
 export const MIG020_EXEC = readFileSync(
   join(__dirname, '..', 'migrations', '020_corretiva_vigencia_legado_fuso_exec.sql'),
+  'utf8',
+);
+/** Execução operacional idempotente (pós populate); não confundir com 020 publicada (b5dcbdb). */
+export const MIG021_EXEC = readFileSync(
+  join(__dirname, '..', 'migrations', '021_corretiva_vigencia_legado_fuso_idempotente.sql'),
+  'utf8',
+);
+export const POPULATE_APROVACAO = readFileSync(
+  join(__dirname, '..', 'scripts', 'sql', 'populate-aprovacao-vigencia-fuso.sql'),
   'utf8',
 );
 
@@ -50,7 +63,8 @@ ON CONFLICT (vigencia_id) DO UPDATE SET
   valido_de_aprovado = EXCLUDED.valido_de_aprovado,
   valido_ate_aprovado = EXCLUDED.valido_ate_aprovado,
   novo_valido_de_aprovado = EXCLUDED.novo_valido_de_aprovado,
-  novo_valido_ate_aprovado = EXCLUDED.novo_valido_ate_aprovado`;
+  novo_valido_ate_aprovado = EXCLUDED.novo_valido_ate_aprovado
+WHERE lexius_mig_vigencia_fuso_aprovacao.correcao_aplicada_em IS NULL`;
 
 export async function inserirAprovacaoVigencia(dataSource: DataSource, vigenciaId: string): Promise<void> {
   await dataSource.query(SNAPSHOT_INSERT_ONE, [vigenciaId]);
@@ -96,7 +110,29 @@ export async function inserirAprovacaoTodosElegiveis(dataSource: DataSource): Pr
       valido_de_aprovado = EXCLUDED.valido_de_aprovado,
       valido_ate_aprovado = EXCLUDED.valido_ate_aprovado,
       novo_valido_de_aprovado = EXCLUDED.novo_valido_de_aprovado,
-      novo_valido_ate_aprovado = EXCLUDED.novo_valido_ate_aprovado`);
+      novo_valido_ate_aprovado = EXCLUDED.novo_valido_ate_aprovado
+    WHERE lexius_mig_vigencia_fuso_aprovacao.correcao_aplicada_em IS NULL`);
+}
+
+/** Remove somente aprovações pendentes (testes); preserva correcao_aplicada_em. */
+export async function limparAprovacoesPendentes(dataSource: DataSource): Promise<void> {
+  await dataSource.query(
+    `DELETE FROM lexius_mig_vigencia_fuso_aprovacao WHERE correcao_aplicada_em IS NULL`,
+  );
+}
+
+/** Esvazia a fila de elegíveis pendentes (isolamento entre casos). */
+export async function drenarElegiveisPendentes(dataSource: DataSource): Promise<void> {
+  await dataSource.query('ROLLBACK').catch(() => undefined);
+  await limparAprovacoesPendentes(dataSource);
+  await inserirAprovacaoTodosElegiveis(dataSource);
+  const [{ n }] = await dataSource.query(
+    `SELECT COUNT(*)::int AS n FROM lexius_vigencia_elegivel_correcao_fuso`,
+  );
+  if (n > 0) {
+    await execMig020(dataSource);
+  }
+  await limparAprovacoesPendentes(dataSource);
 }
 
 export async function execMig020(
@@ -110,7 +146,7 @@ export async function execMig020(
   },
 ): Promise<void> {
   try {
-    await dataSource.query(MIG020_EXEC);
+    await dataSource.query(MIG021_EXEC);
   } catch (e) {
     await dataSource.query('ROLLBACK').catch(() => undefined);
     const msg = (e as Error).message ?? '';
@@ -133,7 +169,7 @@ export async function execMig020(
       return;
     }
     if (opts?.expectAprovacoesOrfas) {
-      expect(msg).toMatch(/Aprovações órfãs/i);
+      expect(msg).toMatch(/Aprovações pendentes sem vigências elegíveis|Aprovações órfãs/i);
       return;
     }
     throw e;

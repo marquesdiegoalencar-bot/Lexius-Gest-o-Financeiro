@@ -12,7 +12,7 @@ import {
   execMig020,
   inserirAprovacaoTodosElegiveis,
   inserirAprovacaoVigencia,
-  MIG020_EXEC,
+  MIG021_EXEC,
 } from './mig-vigencia-fuso-e2e.helpers';
 
 const CIVIL = '2032-08-20';
@@ -48,7 +48,7 @@ describe('simulação publicação migration 019+020 (e2e)', () => {
       const [{ n }] = await dataSource.query(
         `SELECT COUNT(*)::int AS n FROM lexius_vigencia_elegivel_correcao_fuso`,
       );
-      if (n > 0) await dataSource.query(MIG020_EXEC);
+      if (n > 0) await dataSource.query(MIG021_EXEC);
     } catch {
       await dataSource.query('ROLLBACK').catch(() => undefined);
     }
@@ -104,7 +104,7 @@ describe('simulação publicação migration 019+020 (e2e)', () => {
 
     await dataSource.query(`TRUNCATE lexius_mig_vigencia_fuso_aprovacao`);
     await inserirAprovacaoTodosElegiveis(dataSource);
-    await dataSource.query(MIG020_EXEC);
+    await dataSource.query(MIG021_EXEC);
 
     const [{ lh }] = await dataSource.query(
       `SELECT to_char(valido_de AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD HH24:MI:SS') AS lh
@@ -119,7 +119,6 @@ describe('simulação publicação migration 019+020 (e2e)', () => {
     const manausAntes = (
       await dataSource.query(`SELECT valido_de FROM titulo_rateio_vigencia WHERE id = $1`, [vidManaus])
     )[0];
-    await dataSource.query(`TRUNCATE lexius_mig_vigencia_fuso_aprovacao`);
     await execMig020(dataSource);
     const manausDepois = (
       await dataSource.query(`SELECT valido_de FROM titulo_rateio_vigencia WHERE id = $1`, [vidManaus])

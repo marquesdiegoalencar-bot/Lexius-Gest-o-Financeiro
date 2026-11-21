@@ -10,7 +10,7 @@ import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
 import { authHeaders, E2E_MASTER_EMAIL, E2E_MASTER_SENHA, getCategoriaGlobal, login } from './e2e-auth.helpers';
 import { cnpjE2e } from './e2e-cnpj.helpers';
-import { inserirAprovacaoTodosElegiveis, MIG020_EXEC } from './mig-vigencia-fuso-e2e.helpers';
+import { inserirAprovacaoTodosElegiveis, MIG021_EXEC } from './mig-vigencia-fuso-e2e.helpers';
 
 const FUSOS = {
   manaus: 'America/Manaus',
@@ -164,7 +164,7 @@ describe('migration 017/018 — conversão vigência por fuso da empresa (e2e)',
     await dataSource.query(mig018);
     await dataSource.query(`TRUNCATE lexius_mig_vigencia_fuso_aprovacao`);
     await inserirAprovacaoTodosElegiveis(dataSource);
-    await dataSource.query(MIG020_EXEC);
+    await dataSource.query(MIG021_EXEC);
 
     const [{ lh_depois, iso_depois }] = await dataSource.query(
       `SELECT
@@ -191,7 +191,7 @@ describe('migration 017/018 — conversão vigência por fuso da empresa (e2e)',
     await inserirVigenciaAssinaturaMenos4(dataSource, empAcre, titAcre.body.id, CIVIL);
     await dataSource.query(`TRUNCATE lexius_mig_vigencia_fuso_aprovacao`);
     await inserirAprovacaoTodosElegiveis(dataSource);
-    await dataSource.query(MIG020_EXEC);
+    await dataSource.query(MIG021_EXEC);
     const [{ lh_acre }] = await dataSource.query(
       `SELECT to_char(valido_de AT TIME ZONE 'America/Rio_Branco', 'YYYY-MM-DD HH24:MI:SS') AS lh_acre
        FROM titulo_rateio_vigencia WHERE titulo_receber_id = $1`,
