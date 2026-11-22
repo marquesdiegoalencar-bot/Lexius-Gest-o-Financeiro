@@ -1,24 +1,10 @@
-import {
-  ArrowDownCircle,
-  ArrowUpCircle,
-  Landmark,
-  Tag,
-  Users,
-} from 'lucide-react';
-import { ApiResourcePage, StatusBadge, type ColumnDef, type CreateField } from '@/components/api-resource-page';
+import { Landmark, Tag, Users } from 'lucide-react';
+import { ApiResourcePage, type ColumnDef } from '@/components/api-resource-page';
 import { useApi } from '@/hooks/use-api';
 import { formatBRL } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/api';
 import { useState } from 'react';
-
-type TituloRow = Record<string, unknown> & {
-  id: string;
-  descricao: string;
-  valorOriginal: string;
-  dataVencimento: string;
-  status: string;
-};
 
 type PessoaRow = Record<string, unknown> & {
   id: string;
@@ -43,107 +29,6 @@ type ContaRow = Record<string, unknown> & {
   saldoInicial?: string;
   saldoBanco?: string | null;
 };
-
-const tituloColumns: ColumnDef<TituloRow>[] = [
-  { id: 'desc', header: 'Descrição', cell: (r) => r.descricao },
-  {
-    id: 'venc',
-    header: 'Vencimento',
-    cell: (r) => (r.dataVencimento ? String(r.dataVencimento).slice(0, 10) : '—'),
-  },
-  { id: 'valor', header: 'Valor', cell: (r) => formatBRL(r.valorOriginal), className: 'text-right' },
-  { id: 'status', header: 'Status', cell: (r) => <StatusBadge status={String(r.status)} /> },
-];
-
-async function categoriaFields(
-  request: ReturnType<typeof useApi>['request'],
-  natureza: 'RECEITA' | 'DESPESA',
-): Promise<CreateField[]> {
-  const tipoCc = natureza === 'RECEITA' ? 'ENTRADA' : 'SAIDA';
-  const [cats, cc, dept] = await Promise.all([
-    request<{ id: string; nome: string }[]>(`/v1/categorias?natureza=${natureza}`),
-    request<{ id: string; nome: string }[]>(`/v1/centros-custo?tipo=${tipoCc}&ativo=true`),
-    request<{ id: string; nome: string }[]>(`/v1/departamentos?ativo=true`),
-  ]);
-  return [
-    { key: 'descricao', label: 'Descrição', type: 'text', required: true },
-    { key: 'valor_original', label: 'Valor', type: 'number', required: true },
-    {
-      key: 'data_vencimento',
-      label: 'Vencimento',
-      type: 'date',
-      required: true,
-      defaultValue: new Date().toISOString().slice(0, 10),
-    },
-    {
-      key: 'categoria_id',
-      label: 'Categoria',
-      type: 'select',
-      required: true,
-      options: cats.map((c) => ({ value: c.id, label: c.nome })),
-    },
-    {
-      key: 'centro_custo_id',
-      label: 'Centro de custo (opcional)',
-      type: 'select',
-      options: [{ value: '', label: '—' }, ...cc.map((c) => ({ value: c.id, label: c.nome }))],
-    },
-    {
-      key: 'departamento_id',
-      label: 'Departamento (opcional)',
-      type: 'select',
-      options: [{ value: '', label: '—' }, ...dept.map((d) => ({ value: d.id, label: d.nome }))],
-    },
-  ];
-}
-
-function tituloBody(v: Record<string, string>) {
-  const body: Record<string, unknown> = {
-    descricao: v.descricao,
-    valor_original: Number(v.valor_original),
-    data_vencimento: v.data_vencimento,
-    categoria_id: v.categoria_id,
-  };
-  if (v.centro_custo_id) body.centro_custo_id = v.centro_custo_id;
-  if (v.departamento_id) body.departamento_id = v.departamento_id;
-  return body;
-}
-
-export function ContasReceberPage() {
-  return (
-    <ApiResourcePage<TituloRow>
-      title="Contas a Receber"
-      description="Listagem de títulos, baixas e cobrança integrados ao Lexius COB."
-      icon={ArrowDownCircle}
-      listPath="/v1/titulos-receber"
-      columns={tituloColumns}
-      create={{
-        path: '/v1/titulos-receber',
-        submitLabel: 'Novo título a receber',
-        fields: (req) => categoriaFields(req, 'RECEITA'),
-        buildBody: tituloBody,
-      }}
-    />
-  );
-}
-
-export function ContasPagarPage() {
-  return (
-    <ApiResourcePage<TituloRow>
-      title="Contas a Pagar"
-      description="Lançamentos, aprovação e pagamento de despesas."
-      icon={ArrowUpCircle}
-      listPath="/v1/titulos-pagar"
-      columns={tituloColumns}
-      create={{
-        path: '/v1/titulos-pagar',
-        submitLabel: 'Novo título a pagar',
-        fields: (req) => categoriaFields(req, 'DESPESA'),
-        buildBody: tituloBody,
-      }}
-    />
-  );
-}
 
 function BancoSaldoButton({ id }: { id: string }) {
   const { request } = useApi();

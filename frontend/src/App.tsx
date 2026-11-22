@@ -9,10 +9,10 @@ import { DashboardPage } from '@/pages/dashboard-page';
 import {
   BancosPage,
   CategoriasPage,
-  ContasPagarPage,
-  ContasReceberPage,
   PessoasPage,
 } from '@/pages/modules';
+import { ContasReceberPage } from '@/pages/contas-receber-page';
+import { ContasPagarPage } from '@/pages/contas-pagar-page';
 import { EmpresasPage } from '@/pages/empresas-page';
 import { RelatoriosPage } from '@/pages/relatorios-page';
 import { FinanceiroDgPage } from '@/pages/financeiro-dg-page';

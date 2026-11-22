@@ -10,8 +10,10 @@ import {
 } from 'recharts';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowDownCircle, ArrowUpCircle, Banknote, Landmark, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
+import { LexiusMascot } from '@/components/brand/lexius-mascot';
 import { Button } from '@/components/ui/button';
 import { useApi } from '@/hooks/use-api';
+import { useAuth } from '@/lib/auth';
 import { formatBRL } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -48,6 +50,8 @@ type ContaBancaria = {
 
 export function DashboardPage() {
   const { request } = useApi();
+  const { usuario } = useAuth();
+  const primeiroNome = usuario?.nome?.split(' ')[0] ?? 'você';
   const [vencidos, setVencidos] = useState<Vencidos | null>(null);
   const [contas, setContas] = useState<ContaBancaria[]>([]);
   const [erro, setErro] = useState<string | null>(null);
@@ -133,10 +137,36 @@ export function DashboardPage() {
     }));
   }, [contas]);
 
+  const dataHoje = new Date().toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <p className="text-sm text-slate-600">Atalhos e atualização do painel</p>
+      <section className="relative min-h-[11.5rem] overflow-hidden rounded-2xl border border-slate-100 bg-[radial-gradient(ellipse_at_100%_40%,#e3edff_0%,#f5f8ff_42%,#ffffff_72%)] px-6 py-7 shadow-sm sm:min-h-[12.5rem] sm:pr-52 md:pr-60">
+        <div className="relative z-10 max-w-xl sm:max-w-2xl">
+          <p className="text-xs font-semibold tracking-[0.15em] text-lexius-600">LEXIUS FINANCEIRO</p>
+          <h2 className="mt-2 text-2xl font-bold leading-snug text-lexius-navy sm:text-3xl">
+            Olá, {primeiroNome}! Vamos cuidar das finanças?
+          </h2>
+          <p className="mt-2 text-slate-500">Uma visão completa das finanças do seu grupo.</p>
+          <p className="mt-4 text-xs capitalize text-slate-400">{dataHoje}</p>
+        </div>
+        <div
+          className="pointer-events-none absolute bottom-0 right-0 top-0 hidden w-[min(46%,17.5rem)] sm:block"
+          aria-hidden
+        >
+          <LexiusMascot
+            size="lg"
+            className="absolute bottom-0 right-0 h-[118%] w-auto max-h-none max-w-none translate-x-[6%] object-contain object-bottom"
+          />
+        </div>
+      </section>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
+        <p className="text-sm font-medium text-slate-600">Dashboard financeiro</p>
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
@@ -150,15 +180,15 @@ export function DashboardPage() {
             Atualizar
           </Button>
           <Button type="button" size="sm" className="gap-2" asChild>
-            <Link to="/contas-a-receber">
+            <Link to="/contas-a-receber?novo=1">
               <ArrowDownCircle className="h-4 w-4" />
-              A receber
+              Novo a receber
             </Link>
           </Button>
           <Button type="button" size="sm" variant="secondary" className="gap-2" asChild>
-            <Link to="/contas-a-pagar">
+            <Link to="/contas-a-pagar?novo=1">
               <ArrowUpCircle className="h-4 w-4" />
-              A pagar
+              Novo a pagar
             </Link>
           </Button>
           <Button type="button" size="sm" variant="outline" className="gap-2" asChild>
@@ -219,7 +249,7 @@ export function DashboardPage() {
                 <XAxis dataKey="dia" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${v / 1000}k`} />
                 <Tooltip formatter={(v) => formatBRL(Number(v))} />
-                <Area type="monotone" dataKey="entradas" stroke="#2563eb" fill="#dbeafe" name="Entradas" />
+                <Area type="monotone" dataKey="entradas" stroke="#0052ff" fill="#dce8ff" name="Entradas" />
                 <Area type="monotone" dataKey="saidas" stroke="#f59e0b" fill="#fef3c7" name="Saídas" />
               </AreaChart>
             </ResponsiveContainer>
@@ -268,19 +298,19 @@ function IndicatorCard({
   variant?: 'success' | 'warning';
 }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-slate-600">{title}</CardTitle>
+    <Card className="border-slate-100 shadow-sm">
+      <CardHeader className="flex flex-row items-start justify-between pb-2">
+        <CardTitle className="text-sm font-medium text-slate-500">{title}</CardTitle>
         <div
           className={
             variant === 'success'
-              ? 'text-emerald-600'
+              ? 'flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600'
               : variant === 'warning'
-                ? 'text-amber-600'
-                : 'text-lexius-600'
+                ? 'flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600'
+                : 'flex h-9 w-9 items-center justify-center rounded-lg bg-lexius-50 text-lexius-600'
           }
         >
-          <Icon className="h-5 w-5" />
+          <Icon className="h-4 w-4" />
         </div>
       </CardHeader>
       <CardContent>
