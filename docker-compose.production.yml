@@ -1,0 +1,56 @@
+# Stack produção — Coolify / VPS (GitHub deploy)
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-lexius_financeiro}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lexius_financeiro}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      INTER_USE_MOCK: 'false'
+      COB_EMPRESA_CNPJ: ${COB_EMPRESA_CNPJ:-00000000000191}
+      COB_INTEGRACAO_API_KEY: ${COB_INTEGRACAO_API_KEY:-change-me}
+      COB_INTEGRACAO_HMAC_SECRET: ${COB_INTEGRACAO_HMAC_SECRET:-change-me}
+      RUN_DB_MIGRATE: ${RUN_DB_MIGRATE:-true}
+      RUN_DB_SEED: ${RUN_DB_SEED:-true}
+      STORAGE_LOCAL_PATH: /app/storage
+    volumes:
+      - app_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: ''
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '${COOLIFY_PORT:-8080}:80'
+
+volumes:
+  pgdata:
+  app_storage:
