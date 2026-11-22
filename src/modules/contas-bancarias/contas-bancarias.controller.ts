@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { RequirePapeis } from '../../common/decorators/papeis.decorator';
 import { PapelGuard } from '../../common/guards/papel.guard';
 import { PapelUsuario } from '../../database/enums';
@@ -95,6 +95,12 @@ export class ContasBancariasController {
   @RequirePapeis(PapelUsuario.MASTER, PapelUsuario.ADMIN, PapelUsuario.FINANCEIRO)
   update(@Param('id') id: string, @Req() req: { empresaId: string }, @Body() dto: UpdateContaBancariaDto) {
     return this.service.update(id, req.empresaId, dto);
+  }
+
+  @Delete(':id')
+  @RequirePapeis(PapelUsuario.MASTER, PapelUsuario.ADMIN)
+  remove(@Param('id') id: string, @Req() req: { empresaId: string }) {
+    return this.service.remove(id, req.empresaId);
   }
 
   @Post(':id/tarifas-cobranca')

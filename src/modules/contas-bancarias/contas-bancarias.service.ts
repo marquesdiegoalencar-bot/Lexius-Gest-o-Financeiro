@@ -1,12 +1,26 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { BancoProviderRegistry } from '../banco/banco-provider.registry';
 import { ExtratoSincronizacaoService } from '../banco/extrato-sincronizacao.service';
 import { ProvedorBancario, TipoContaBancaria } from '../../database/enums';
 import { ContaBancaria } from '../../database/entities/conta-bancaria.entity';
 import { CreateContaBancariaDto } from './dto/create-conta-bancaria.dto';
 import { UpdateContaBancariaDto } from './dto/update-conta-bancaria.dto';
+
+const DEPENDENCIAS_CONTA_SQL = `
+  SELECT (
+    EXISTS (SELECT 1 FROM movimentos_bancarios WHERE conta_bancaria_id = $1)
+    OR EXISTS (SELECT 1 FROM baixas WHERE conta_bancaria_id = $1)
+    OR EXISTS (SELECT 1 FROM titulos_receber WHERE conta_bancaria_id = $1)
+    OR EXISTS (SELECT 1 FROM titulos_pagar WHERE conta_bancaria_id = $1)
+    OR EXISTS (SELECT 1 FROM recorrencias WHERE conta_bancaria_id = $1)
+    OR EXISTS (SELECT 1 FROM cobrancas_boleto WHERE conta_bancaria_id = $1)
+    OR EXISTS (SELECT 1 FROM cobranca_emissao_pendente WHERE conta_bancaria_id = $1)
+    OR EXISTS (SELECT 1 FROM pagamentos_bancarios WHERE conta_origem_id = $1 OR conta_destino_id = $1)
+    OR EXISTS (SELECT 1 FROM repasses WHERE conta_origem_id = $1)
+  ) AS bloqueado
+`;
 
 @Injectable()
 export class ContasBancariasService {
@@ -131,5 +145,29 @@ export class ContasBancariasService {
       throw new BadRequestException('Sincronização de extrato desativada para esta conta');
     }
     return this.sincronizacao.sincronizar(conta, { de, ate });
+  }
+
+  async remove(id: string, empresaId: string) {
+    await this.findOne(id, empresaId);
+
+    const [{ bloqueado }] = await this.repo.manager.query(DEPENDENCIAS_CONTA_SQL, [id]);
+    if (bloqueado) {
+      throw new ConflictException(
+        'Não é possível excluir: a conta possui movimentos, baixas, títulos ou cobranças vinculados. Inative-a em vez de apagar.',
+      );
+    }
+
+    try {
+      await this.repo.delete({ id, empresaId });
+    } catch (e) {
+      if (e instanceof QueryFailedError && String(e.message).includes('23503')) {
+        throw new ConflictException(
+          'Não é possível excluir: existem registros dependentes. Inative a conta.',
+        );
+      }
+      throw e;
+    }
+
+    return { ok: true };
   }
 }

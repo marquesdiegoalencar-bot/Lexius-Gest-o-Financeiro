@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Landmark, Loader2, Pencil, Plus, RefreshCw, Wifi } from 'lucide-react';
+import { Landmark, Loader2, Pencil, Plus, RefreshCw, Trash2, Wifi } from 'lucide-react';
 import { useApi } from '@/hooks/use-api';
 import { useAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/api';
@@ -247,6 +247,25 @@ export function BancosPage() {
       setErro(e instanceof ApiError ? e.message : 'Erro ao consultar saldo na API');
     } finally {
       setSaldoLoading(null);
+    }
+  };
+
+  const excluir = async (row: ContaRow) => {
+    if (
+      !window.confirm(
+        `Excluir a conta "${row.apelido}"? Só é possível se não houver movimentos ou títulos vinculados.`,
+      )
+    ) {
+      return;
+    }
+    setErro(null);
+    setSucesso(null);
+    try {
+      await request(`/v1/contas-bancarias/${row.id}`, { method: 'DELETE' });
+      setSucesso('Conta excluída.');
+      await load(true);
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Erro ao excluir');
     }
   };
 
@@ -580,6 +599,18 @@ export function BancosPage() {
                             >
                               <Wifi className="h-3.5 w-3.5" />
                               Sync
+                            </Button>
+                          ) : null}
+                          {empresaAtiva?.papel === 'MASTER' || empresaAtiva?.papel === 'ADMIN' ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1 text-red-700 hover:bg-red-50"
+                              onClick={() => void excluir(row)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Excluir
                             </Button>
                           ) : null}
                         </hgroup>
