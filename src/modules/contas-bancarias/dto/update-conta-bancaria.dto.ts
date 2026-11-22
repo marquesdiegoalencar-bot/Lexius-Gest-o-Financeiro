@@ -16,4 +16,12 @@ export class UpdateContaBancariaDto {
   @IsOptional()
   @IsString()
   tipo_chave_pix?: string;
+
+  @IsOptional()
+  @IsString()
+  credencial_ref?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  sincroniza_extrato?: boolean;
 }

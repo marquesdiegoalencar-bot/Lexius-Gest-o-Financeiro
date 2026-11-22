@@ -1,10 +1,5 @@
-import { Landmark, Tag, Users } from 'lucide-react';
+import { Tag, Users } from 'lucide-react';
 import { ApiResourcePage, type ColumnDef } from '@/components/api-resource-page';
-import { useApi } from '@/hooks/use-api';
-import { formatBRL } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { ApiError } from '@/lib/api';
-import { useState } from 'react';
 
 type PessoaRow = Record<string, unknown> & {
   id: string;
@@ -20,73 +15,6 @@ type CategoriaRow = Record<string, unknown> & {
   natureza: string;
   codigo?: string | null;
 };
-
-type ContaRow = Record<string, unknown> & {
-  id: string;
-  apelido: string;
-  bancoCodigo: string;
-  provedor: string;
-  saldoInicial?: string;
-  saldoBanco?: string | null;
-};
-
-function BancoSaldoButton({ id }: { id: string }) {
-  const { request } = useApi();
-  const [valor, setValor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  return (
-    <div className="flex flex-col items-end gap-1">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={loading}
-        onClick={async () => {
-          setLoading(true);
-          try {
-            const res = await request<{ saldo?: string; saldo_banco?: string }>(
-              `/v1/contas-bancarias/${id}/saldo`,
-            );
-            setValor(res.saldo_banco ?? res.saldo ?? JSON.stringify(res));
-          } catch (e) {
-            setValor(e instanceof ApiError ? e.message : 'Erro');
-          } finally {
-            setLoading(false);
-          }
-        }}
-      >
-        Saldo
-      </Button>
-      {valor ? <span className="text-xs text-slate-600">{formatBRL(valor)}</span> : null}
-    </div>
-  );
-}
-
-const contaColumns: ColumnDef<ContaRow>[] = [
-  { id: 'apelido', header: 'Apelido', cell: (r) => r.apelido },
-  { id: 'banco', header: 'Banco', cell: (r) => r.bancoCodigo },
-  { id: 'prov', header: 'Provedor', cell: (r) => r.provedor },
-  {
-    id: 'saldo',
-    header: 'Saldo ref.',
-    cell: (r) => formatBRL(r.saldoBanco ?? r.saldoInicial ?? 0),
-    className: 'text-right',
-  },
-];
-
-export function BancosPage() {
-  return (
-    <ApiResourcePage<ContaRow>
-      title="Contas Bancárias"
-      description="Saldos, extrato e sincronização Inter."
-      icon={Landmark}
-      listPath="/v1/contas-bancarias"
-      columns={contaColumns}
-      rowActions={(row) => <BancoSaldoButton id={row.id} />}
-    />
-  );
-}
 
 const pessoaColumns: ColumnDef<PessoaRow>[] = [
   { id: 'nome', header: 'Nome', cell: (r) => r.nome },

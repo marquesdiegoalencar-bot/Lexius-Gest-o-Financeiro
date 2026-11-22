@@ -65,6 +65,11 @@ export class ContasBancariasService {
     if (dto.ativa !== undefined) conta.ativa = dto.ativa;
     if (dto.chave_pix !== undefined) conta.chavePix = dto.chave_pix?.trim() ?? null;
     if (dto.tipo_chave_pix !== undefined) conta.tipoChavePix = dto.tipo_chave_pix?.trim() ?? null;
+    if (dto.credencial_ref !== undefined) conta.credencialRef = dto.credencial_ref?.trim() ?? null;
+    if (dto.sincroniza_extrato !== undefined) conta.sincronizaExtrato = dto.sincroniza_extrato;
+    if (conta.provedor === ProvedorBancario.INTER && !conta.credencialRef?.trim()) {
+      throw new BadRequestException('credencial_ref é obrigatório para conta Inter');
+    }
     return this.repo.save(conta);
   }
 

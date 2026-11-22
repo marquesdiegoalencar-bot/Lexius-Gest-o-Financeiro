@@ -6,11 +6,8 @@ import { EsqueciSenhaPage } from '@/pages/esqueci-senha-page';
 import { LoginPage } from '@/pages/login-page';
 import { RedefinirSenhaPage } from '@/pages/redefinir-senha-page';
 import { DashboardPage } from '@/pages/dashboard-page';
-import {
-  BancosPage,
-  CategoriasPage,
-  PessoasPage,
-} from '@/pages/modules';
+import { CategoriasPage, PessoasPage } from '@/pages/modules';
+import { BancosPage } from '@/pages/contas-bancarias-page';
 import { ContasReceberPage } from '@/pages/contas-receber-page';
 import { ContasPagarPage } from '@/pages/contas-pagar-page';
 import { EmpresasPage } from '@/pages/empresas-page';
