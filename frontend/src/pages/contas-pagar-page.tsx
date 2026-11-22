@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowUpCircle, Loader2, Plus, RefreshCw } from 'lucide-react';
+import { ArrowUpCircle, Loader2, Plus, RefreshCw, UserPlus } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { StatusBadge } from '@/components/api-resource-page';
 import { useApi } from '@/hooks/use-api';
@@ -8,6 +8,7 @@ import { ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Modal } from '@/components/ui/modal';
 import { formatBRL } from '@/lib/utils';
 
 type TituloRow = {
@@ -35,6 +36,14 @@ const emptyForm = () => ({
   observacao: '',
 });
 
+const emptyFornecedor = () => ({
+  nome: '',
+  tipo_pessoa: 'FISICA',
+  documento: '',
+  email: '',
+  telefone: '',
+});
+
 export function ContasPagarPage() {
   const { request, empresaId } = useApi();
   const { empresaAtiva } = useAuth();
@@ -55,6 +64,9 @@ export function ContasPagarPage() {
   const [pessoas, setPessoas] = useState<SelectOpt[]>([]);
   const [contas, setContas] = useState<SelectOpt[]>([]);
   const [optsLoading, setOptsLoading] = useState(false);
+  const [fornecedorModalOpen, setFornecedorModalOpen] = useState(false);
+  const [novoFornecedor, setNovoFornecedor] = useState(emptyFornecedor);
+  const [salvandoFornecedor, setSalvandoFornecedor] = useState(false);
 
   const loadList = useCallback(
     async (silent?: boolean) => {
@@ -124,6 +136,60 @@ export function ContasPagarPage() {
   const cancelForm = () => {
     setFormOpen(false);
     setForm(emptyForm());
+    setFornecedorModalOpen(false);
+    setNovoFornecedor(emptyFornecedor());
+  };
+
+  const fecharModalFornecedor = () => {
+    setFornecedorModalOpen(false);
+    setNovoFornecedor(emptyFornecedor());
+  };
+
+  const salvarNovoFornecedor = async () => {
+    if (!novoFornecedor.nome.trim()) {
+      setErro('Informe o nome da pessoa.');
+      return;
+    }
+    const doc = novoFornecedor.documento.replace(/\D/g, '');
+    if (doc.length !== 11 && doc.length !== 14) {
+      setErro('Informe CPF (11 dígitos) ou CNPJ (14 dígitos).');
+      return;
+    }
+    if (doc.length === 11 && novoFornecedor.tipo_pessoa !== 'FISICA') {
+      setErro('CPF com 11 dígitos exige tipo Pessoa física.');
+      return;
+    }
+    if (doc.length === 14 && novoFornecedor.tipo_pessoa !== 'JURIDICA') {
+      setErro('CNPJ com 14 dígitos exige tipo Pessoa jurídica.');
+      return;
+    }
+    setSalvandoFornecedor(true);
+    setErro(null);
+    try {
+      const created = await request<{ id: string; nome: string }>('/v1/pessoas', {
+        method: 'POST',
+        body: JSON.stringify({
+          nome: novoFornecedor.nome.trim(),
+          tipo_pessoa: novoFornecedor.tipo_pessoa,
+          documento: doc,
+          email: novoFornecedor.email.trim() || undefined,
+          telefone: novoFornecedor.telefone.trim() || undefined,
+          eh_fornecedor: true,
+        }),
+      });
+      setPessoas((prev) => {
+        const next = [...prev, { id: created.id, nome: created.nome }];
+        next.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        return next;
+      });
+      setForm((f) => ({ ...f, fornecedor_id: created.id }));
+      fecharModalFornecedor();
+      setSucesso(`Fornecedor "${created.nome}" salvo em Pessoas e selecionado.`);
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Erro ao cadastrar fornecedor');
+    } finally {
+      setSalvandoFornecedor(false);
+    }
   };
 
   const save = async () => {
@@ -284,21 +350,36 @@ export function ContasPagarPage() {
                     ))}
                   </select>
                 </label>
-                <label className="block space-y-1 text-sm sm:col-span-2">
-                  <span className="font-medium text-slate-700">Fornecedor (pessoa)</span>
-                  <select
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
-                    value={form.fornecedor_id}
-                    onChange={(e) => setForm((f) => ({ ...f, fornecedor_id: e.target.value }))}
+                <div className="flex flex-wrap items-end justify-between gap-2 sm:col-span-2">
+                  <label className="block min-w-0 flex-1 space-y-1 text-sm">
+                    <span className="font-medium text-slate-700">Fornecedor (pessoa)</span>
+                    <select
+                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+                      value={form.fornecedor_id}
+                      onChange={(e) => setForm((f) => ({ ...f, fornecedor_id: e.target.value }))}
+                    >
+                      <option value="">—</option>
+                      {pessoas.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-1"
+                    onClick={() => {
+                      setNovoFornecedor(emptyFornecedor());
+                      setFornecedorModalOpen(true);
+                    }}
                   >
-                    <option value="">—</option>
-                    {pessoas.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.nome}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <UserPlus className="h-3.5 w-3.5" />
+                    Nova pessoa
+                  </Button>
+                </div>
                 <label className="block space-y-1 text-sm">
                   <span className="font-medium text-slate-700">Centro de custo</span>
                   <select
@@ -365,6 +446,83 @@ export function ContasPagarPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <Modal
+        open={fornecedorModalOpen}
+        onClose={fecharModalFornecedor}
+        title="Nova pessoa (fornecedor)"
+        description="Cadastro em Pessoas com CPF ou CNPJ. O fornecedor fica vinculado a este título."
+        footer={
+          <>
+            <Button type="button" variant="outline" onClick={fecharModalFornecedor}>
+              Cancelar
+            </Button>
+            <Button type="button" disabled={salvandoFornecedor} onClick={() => void salvarNovoFornecedor()}>
+              {salvandoFornecedor ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Salvar pessoa
+            </Button>
+          </>
+        }
+      >
+        <form
+          className="grid gap-3 sm:grid-cols-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void salvarNovoFornecedor();
+          }}
+        >
+          <label className="block space-y-1 text-sm sm:col-span-2">
+            <span className="font-medium text-slate-700">Nome / razão social *</span>
+            <Input
+              autoFocus
+              value={novoFornecedor.nome}
+              onChange={(e) => setNovoFornecedor((c) => ({ ...c, nome: e.target.value }))}
+            />
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Tipo</span>
+            <select
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+              value={novoFornecedor.tipo_pessoa}
+              onChange={(e) => setNovoFornecedor((c) => ({ ...c, tipo_pessoa: e.target.value }))}
+            >
+              <option value="FISICA">Pessoa física (CPF)</option>
+              <option value="JURIDICA">Pessoa jurídica (CNPJ)</option>
+            </select>
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="font-medium text-slate-700">CPF / CNPJ *</span>
+            <Input
+              inputMode="numeric"
+              placeholder="Somente números"
+              value={novoFornecedor.documento}
+              onChange={(e) =>
+                setNovoFornecedor((c) => ({
+                  ...c,
+                  documento: e.target.value.replace(/\D/g, '').slice(0, 14),
+                }))
+              }
+            />
+          </label>
+          <label className="block space-y-1 text-sm sm:col-span-2">
+            <span className="font-medium text-slate-700">Telefone</span>
+            <Input
+              type="tel"
+              placeholder="(92) 99999-9999"
+              value={novoFornecedor.telefone}
+              onChange={(e) => setNovoFornecedor((c) => ({ ...c, telefone: e.target.value }))}
+            />
+          </label>
+          <label className="block space-y-1 text-sm sm:col-span-2">
+            <span className="font-medium text-slate-700">E-mail</span>
+            <Input
+              type="email"
+              value={novoFornecedor.email}
+              onChange={(e) => setNovoFornecedor((c) => ({ ...c, email: e.target.value }))}
+            />
+          </label>
+        </form>
+      </Modal>
 
       <Card className="overflow-hidden shadow-sm">
         <CardContent className="p-0">
