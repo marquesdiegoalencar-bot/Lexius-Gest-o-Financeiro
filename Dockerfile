@@ -13,7 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
-COPY schema.sql migrations ./ 
+COPY schema.sql ./
+COPY migrations ./migrations/
 COPY scripts/migrate.js scripts/seed-dev.js ./scripts/
 COPY scripts/docker-api-entrypoint.sh ./scripts/docker-api-entrypoint.sh
 RUN chmod +x ./scripts/docker-api-entrypoint.sh
