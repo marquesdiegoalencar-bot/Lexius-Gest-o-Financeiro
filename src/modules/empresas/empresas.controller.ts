@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { RequirePapeis } from '../../common/decorators/papeis.decorator';
 import { PapelGuard } from '../../common/guards/papel.guard';
 import { PapelUsuario } from '../../database/enums';
@@ -23,8 +23,8 @@ export class EmpresasController {
   @Post()
   @UseGuards(PapelGuard)
   @RequirePapeis(PapelUsuario.MASTER)
-  create(@Body() dto: CreateEmpresaDto) {
-    return this.service.create(dto);
+  create(@Req() req: { user?: { sub: string } }, @Body() dto: CreateEmpresaDto) {
+    return this.service.create(dto, req.user?.sub);
   }
 
   @Patch(':id')
@@ -32,5 +32,12 @@ export class EmpresasController {
   @RequirePapeis(PapelUsuario.MASTER, PapelUsuario.ADMIN)
   update(@Param('id') id: string, @Body() dto: UpdateEmpresaDto) {
     return this.service.update(id, dto);
+  }
+
+  @Delete(':id')
+  @UseGuards(PapelGuard)
+  @RequirePapeis(PapelUsuario.MASTER)
+  remove(@Param('id') id: string) {
+    return this.service.remove(id);
   }
 }

@@ -11,9 +11,9 @@ import {
   CategoriasPage,
   ContasPagarPage,
   ContasReceberPage,
-  EmpresasPage,
   PessoasPage,
 } from '@/pages/modules';
+import { EmpresasPage } from '@/pages/empresas-page';
 import { RelatoriosPage } from '@/pages/relatorios-page';
 import { FinanceiroDgPage } from '@/pages/financeiro-dg-page';
 import { CentrosCustoPage } from '@/pages/centros-custo-page';

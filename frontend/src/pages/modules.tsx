@@ -1,12 +1,11 @@
 import {
   ArrowDownCircle,
   ArrowUpCircle,
-  Building2,
   Landmark,
   Tag,
   Users,
 } from 'lucide-react';
-import { ApiResourcePage, StatusBadge, truncateId, type ColumnDef, type CreateField } from '@/components/api-resource-page';
+import { ApiResourcePage, StatusBadge, type ColumnDef, type CreateField } from '@/components/api-resource-page';
 import { useApi } from '@/hooks/use-api';
 import { formatBRL } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -43,13 +42,6 @@ type ContaRow = Record<string, unknown> & {
   provedor: string;
   saldoInicial?: string;
   saldoBanco?: string | null;
-};
-
-type EmpresaRow = Record<string, unknown> & {
-  id: string;
-  razaoSocial: string;
-  cnpj: string;
-  tipo: string;
 };
 
 const tituloColumns: ColumnDef<TituloRow>[] = [
@@ -251,51 +243,6 @@ export function PessoasPage() {
           documento: v.documento || undefined,
           email: v.email || undefined,
           eh_cliente: true,
-        }),
-      }}
-    />
-  );
-}
-
-const empresaColumns: ColumnDef<EmpresaRow>[] = [
-  { id: 'razao', header: 'Razão social', cell: (r) => r.razaoSocial },
-  { id: 'cnpj', header: 'CNPJ', cell: (r) => r.cnpj },
-  { id: 'tipo', header: 'Tipo', cell: (r) => r.tipo },
-  { id: 'id', header: 'ID', cell: (r) => <code className="text-xs">{truncateId(r.id)}</code> },
-];
-
-export function EmpresasPage() {
-  return (
-    <ApiResourcePage<EmpresaRow>
-      title="Empresas"
-      description="Multi-empresa do grupo Lexius."
-      icon={Building2}
-      listPath="/v1/empresas"
-      columns={empresaColumns}
-      create={{
-        path: '/v1/empresas',
-        submitLabel: 'Nova empresa (MASTER)',
-        fields: [
-          { key: 'razao_social', label: 'Razão social', type: 'text', required: true },
-          { key: 'cnpj', label: 'CNPJ (14 dígitos)', type: 'text', required: true },
-          {
-            key: 'tipo',
-            label: 'Tipo',
-            type: 'select',
-            required: true,
-            defaultValue: 'OUTRA',
-            options: [
-              { value: 'COBRANCA', label: 'Cobrança' },
-              { value: 'SISTEMAS', label: 'Sistemas' },
-              { value: 'ADVOCACIA', label: 'Advocacia' },
-              { value: 'OUTRA', label: 'Outra' },
-            ],
-          },
-        ],
-        buildBody: (v) => ({
-          razao_social: v.razao_social,
-          cnpj: v.cnpj.replace(/\D/g, ''),
-          tipo: v.tipo,
         }),
       }}
     />

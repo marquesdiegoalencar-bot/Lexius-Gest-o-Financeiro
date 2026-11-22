@@ -52,6 +52,8 @@ type AuthContextValue = AuthState & {
   setEmpresaId: (id: string) => void;
   empresaAtiva: EmpresaVinculo | null;
   isAuthenticated: boolean;
+  upsertEmpresaVinculo: (v: EmpresaVinculo) => void;
+  removeEmpresaVinculo: (empresaId: string) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -119,6 +121,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persist, state],
   );
 
+  const upsertEmpresaVinculo = useCallback(
+    (v: EmpresaVinculo) => {
+      if (!state.usuario) return;
+      const empresas = [...state.usuario.empresas];
+      const ix = empresas.findIndex((e) => e.empresa_id === v.empresa_id);
+      if (ix >= 0) empresas[ix] = { ...empresas[ix], ...v };
+      else empresas.push(v);
+      persist({
+        ...state,
+        usuario: { ...state.usuario, empresas },
+        empresaId: state.empresaId ?? v.empresa_id,
+      });
+    },
+    [persist, state],
+  );
+
+  const removeEmpresaVinculo = useCallback(
+    (removedId: string) => {
+      if (!state.usuario) return;
+      const empresas = state.usuario.empresas.filter((e) => e.empresa_id !== removedId);
+      const nextEmpresaId =
+        state.empresaId === removedId ? (empresas[0]?.empresa_id ?? null) : state.empresaId;
+      persist({
+        ...state,
+        usuario: { ...state.usuario, empresas },
+        empresaId: nextEmpresaId,
+      });
+    },
+    [persist, state],
+  );
+
   const empresaAtiva = useMemo(() => {
     if (!state.usuario || !state.empresaId) return null;
     return state.usuario.empresas.find((e) => e.empresa_id === state.empresaId) ?? null;
@@ -132,8 +165,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setEmpresaId,
       empresaAtiva,
       isAuthenticated: Boolean(state.token && state.empresaId),
+      upsertEmpresaVinculo,
+      removeEmpresaVinculo,
     }),
-    [state, login, logout, setEmpresaId, empresaAtiva],
+    [state, login, logout, setEmpresaId, empresaAtiva, upsertEmpresaVinculo, removeEmpresaVinculo],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

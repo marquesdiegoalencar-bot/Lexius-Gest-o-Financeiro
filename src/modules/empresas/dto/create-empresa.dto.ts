@@ -16,4 +16,8 @@ export class CreateEmpresaDto {
   @Length(14, 14)
   @Matches(/^\d{14}$/)
   cnpj!: string;
+
+  @IsOptional()
+  @IsString()
+  fuso_negocio?: string;
 }
