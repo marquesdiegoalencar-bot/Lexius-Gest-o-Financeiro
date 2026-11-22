@@ -2,6 +2,7 @@
 /**
  * Remove lançamentos e cadastros de teste (e2e/manual), preservando seed de login e categorias globais.
  * Uso: npm run db:clean-work
+ * Slate total (--slate): remove TODAS empresas e contas; categorias globais e usuários permanecem.
  */
 const { Client } = require('pg');
 
@@ -46,6 +47,8 @@ const TX_TABLES = [
   'contas_bancarias',
 ];
 
+const slateTotal = process.argv.includes('--slate');
+
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) {
@@ -76,24 +79,38 @@ async function main() {
       console.log('Transacionais truncadas:', existing.length, 'tabelas');
     }
 
-    await client.query(
-      `DELETE FROM usuario_empresa
-       WHERE empresa_id IN (SELECT id FROM empresas WHERE cnpj <> $1)`,
-      [SEED_CNPJ],
-    );
-
-    const delEmpresas = await client.query(`DELETE FROM empresas WHERE cnpj <> $1`, [SEED_CNPJ]);
-    console.log(`empresas (teste): ${delEmpresas.rowCount ?? 0} removida(s)`);
-
-    const seed = await client.query('SELECT id, razao_social FROM empresas WHERE cnpj = $1', [SEED_CNPJ]);
-    if (!seed.rows.length) {
-      console.warn('Empresa seed não encontrada; rode npm run db:seed:dev após o clean.');
+    if (slateTotal) {
+      const delCat = await client.query('DELETE FROM categorias WHERE empresa_id IS NOT NULL');
+      console.log(`categorias (por empresa): ${delCat.rowCount ?? 0} removida(s)`);
+      await client.query('DELETE FROM usuario_empresa');
+      const delEmpresas = await client.query('DELETE FROM empresas');
+      console.log(`empresas: ${delEmpresas.rowCount ?? 0} removida(s) (nenhuma mantida)`);
+      const contas = await client.query('SELECT COUNT(*)::int AS c FROM contas_bancarias');
+      console.log(`contas_bancarias restantes: ${contas.rows[0]?.c ?? 0}`);
     } else {
-      console.log('Empresa mantida:', seed.rows[0].razao_social, `(${SEED_CNPJ})`);
+      await client.query(
+        `DELETE FROM usuario_empresa
+         WHERE empresa_id IN (SELECT id FROM empresas WHERE cnpj <> $1)`,
+        [SEED_CNPJ],
+      );
+
+      const delEmpresas = await client.query(`DELETE FROM empresas WHERE cnpj <> $1`, [SEED_CNPJ]);
+      console.log(`empresas (teste): ${delEmpresas.rowCount ?? 0} removida(s)`);
+
+      const seed = await client.query('SELECT id, razao_social FROM empresas WHERE cnpj = $1', [SEED_CNPJ]);
+      if (!seed.rows.length) {
+        console.warn('Empresa seed não encontrada; rode npm run db:seed:dev após o clean.');
+      } else {
+        console.log('Empresa mantida:', seed.rows[0].razao_social, `(${SEED_CNPJ})`);
+      }
     }
 
     await client.query('COMMIT');
-    console.log('Banco pronto para trabalho real (estrutura e categorias globais preservadas).');
+    if (slateTotal) {
+      console.log('Sistema limpo. Rode: npm run db:seed:dev');
+    } else {
+      console.log('Banco pronto para trabalho real (estrutura e categorias globais preservadas).');
+    }
     console.log('Login dev:', process.env.SEED_MASTER_EMAIL || 'master@lexius.local');
   } catch (e) {
     await client.query('ROLLBACK');
