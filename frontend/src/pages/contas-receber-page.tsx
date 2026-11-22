@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDownCircle, Loader2, Plus, RefreshCw } from 'lucide-react';
+import { ArrowDownCircle, Loader2, Plus, RefreshCw, UserPlus } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { StatusBadge } from '@/components/api-resource-page';
 import { useApi } from '@/hooks/use-api';
@@ -35,6 +35,13 @@ const emptyForm = () => ({
   observacao: '',
 });
 
+const emptyCliente = () => ({
+  nome: '',
+  tipo_pessoa: 'FISICA',
+  documento: '',
+  email: '',
+});
+
 export function ContasReceberPage() {
   const { request, empresaId } = useApi();
   const { empresaAtiva } = useAuth();
@@ -55,6 +62,9 @@ export function ContasReceberPage() {
   const [pessoas, setPessoas] = useState<SelectOpt[]>([]);
   const [contas, setContas] = useState<SelectOpt[]>([]);
   const [optsLoading, setOptsLoading] = useState(false);
+  const [novoClienteOpen, setNovoClienteOpen] = useState(false);
+  const [novoCliente, setNovoCliente] = useState(emptyCliente);
+  const [salvandoCliente, setSalvandoCliente] = useState(false);
 
   const loadList = useCallback(
     async (silent?: boolean) => {
@@ -124,6 +134,43 @@ export function ContasReceberPage() {
   const cancelForm = () => {
     setFormOpen(false);
     setForm(emptyForm());
+    setNovoClienteOpen(false);
+    setNovoCliente(emptyCliente());
+  };
+
+  const salvarNovoCliente = async () => {
+    if (!novoCliente.nome.trim()) {
+      setErro('Informe o nome do cliente.');
+      return;
+    }
+    setSalvandoCliente(true);
+    setErro(null);
+    try {
+      const doc = novoCliente.documento.replace(/\D/g, '');
+      const created = await request<{ id: string; nome: string }>('/v1/pessoas', {
+        method: 'POST',
+        body: JSON.stringify({
+          nome: novoCliente.nome.trim(),
+          tipo_pessoa: novoCliente.tipo_pessoa,
+          documento: doc || undefined,
+          email: novoCliente.email.trim() || undefined,
+          eh_cliente: true,
+        }),
+      });
+      setPessoas((prev) => {
+        const next = [...prev, { id: created.id, nome: created.nome }];
+        next.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        return next;
+      });
+      setForm((f) => ({ ...f, pessoa_id: created.id }));
+      setNovoCliente(emptyCliente());
+      setNovoClienteOpen(false);
+      setSucesso(`Cliente "${created.nome}" salvo em Pessoas e selecionado.`);
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Erro ao cadastrar cliente');
+    } finally {
+      setSalvandoCliente(false);
+    }
   };
 
   const save = async () => {
@@ -284,21 +331,89 @@ export function ContasReceberPage() {
                     ))}
                   </select>
                 </label>
-                <label className="block space-y-1 text-sm sm:col-span-2">
-                  <span className="font-medium text-slate-700">Cliente (pessoa)</span>
-                  <select
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
-                    value={form.pessoa_id}
-                    onChange={(e) => setForm((f) => ({ ...f, pessoa_id: e.target.value }))}
-                  >
-                    <option value="">—</option>
-                    {pessoas.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.nome}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="space-y-2 sm:col-span-2">
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <label className="block min-w-0 flex-1 space-y-1 text-sm">
+                      <span className="font-medium text-slate-700">Cliente (pessoa)</span>
+                      <select
+                        className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+                        value={form.pessoa_id}
+                        onChange={(e) => setForm((f) => ({ ...f, pessoa_id: e.target.value }))}
+                      >
+                        <option value="">—</option>
+                        {pessoas.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.nome}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1 shrink-0"
+                      onClick={() => setNovoClienteOpen((o) => !o)}
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      {novoClienteOpen ? 'Cancelar cliente' : 'Novo cliente'}
+                    </Button>
+                  </div>
+                  {novoClienteOpen ? (
+                    <div className="rounded-lg border border-dashed border-lexius-200 bg-lexius-50/40 p-3">
+                      <p className="mb-2 text-xs font-medium text-slate-600">
+                        Cadastro rápido (grava em Pessoas como cliente)
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <label className="block space-y-1 text-sm sm:col-span-2">
+                          <span className="font-medium text-slate-700">Nome *</span>
+                          <Input
+                            value={novoCliente.nome}
+                            onChange={(e) => setNovoCliente((c) => ({ ...c, nome: e.target.value }))}
+                          />
+                        </label>
+                        <label className="block space-y-1 text-sm">
+                          <span className="font-medium text-slate-700">Tipo</span>
+                          <select
+                            className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+                            value={novoCliente.tipo_pessoa}
+                            onChange={(e) =>
+                              setNovoCliente((c) => ({ ...c, tipo_pessoa: e.target.value }))
+                            }
+                          >
+                            <option value="FISICA">Pessoa física</option>
+                            <option value="JURIDICA">Pessoa jurídica</option>
+                          </select>
+                        </label>
+                        <label className="block space-y-1 text-sm">
+                          <span className="font-medium text-slate-700">CPF/CNPJ</span>
+                          <Input
+                            value={novoCliente.documento}
+                            onChange={(e) => setNovoCliente((c) => ({ ...c, documento: e.target.value }))}
+                          />
+                        </label>
+                        <label className="block space-y-1 text-sm sm:col-span-2">
+                          <span className="font-medium text-slate-700">E-mail</span>
+                          <Input
+                            type="email"
+                            value={novoCliente.email}
+                            onChange={(e) => setNovoCliente((c) => ({ ...c, email: e.target.value }))}
+                          />
+                        </label>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="mt-3 gap-1"
+                        disabled={salvandoCliente}
+                        onClick={() => void salvarNovoCliente()}
+                      >
+                        {salvandoCliente ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        Salvar cliente
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
                 <label className="block space-y-1 text-sm">
                   <span className="font-medium text-slate-700">Centro de custo</span>
                   <select
