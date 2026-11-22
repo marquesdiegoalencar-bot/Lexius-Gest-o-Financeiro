@@ -51,6 +51,7 @@ export async function criarContaBancaria(
       banco_codigo: '001',
       agencia: '0001',
       conta: sufixo,
+      data_saldo_inicial: '2020-01-01',
     });
   expect(res.status).toBe(201);
   return res.body.id as string;

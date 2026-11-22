@@ -7,13 +7,13 @@ import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
 import { cnpjE2e } from './e2e-cnpj.helpers';
-import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
 import { limparAprovacoesPendentes, MIG019A_TRILHA, MIG021_EXEC } from './mig-vigencia-fuso-e2e.helpers';
 
 const CIVIL = '2035-02-01';
-const MIG020_PUBLISHED = execSync(
-  'git show b5dcbdb:migrations/020_corretiva_vigencia_legado_fuso_exec.sql',
-  { encoding: 'utf8', cwd: join(__dirname, '..') },
+const MIG020_PUBLISHED = readFileSync(
+  join(__dirname, '..', 'migrations', '020_corretiva_vigencia_legado_fuso_exec.sql'),
+  'utf8',
 );
 
 describe('compat 019 publicada + 019a + atomicidade 020 (e2e)', () => {
