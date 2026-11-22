@@ -8,6 +8,7 @@ import { ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Modal } from '@/components/ui/modal';
 import { formatBRL } from '@/lib/utils';
 
 type TituloRow = {
@@ -40,6 +41,7 @@ const emptyCliente = () => ({
   tipo_pessoa: 'FISICA',
   documento: '',
   email: '',
+  telefone: '',
 });
 
 export function ContasReceberPage() {
@@ -62,7 +64,7 @@ export function ContasReceberPage() {
   const [pessoas, setPessoas] = useState<SelectOpt[]>([]);
   const [contas, setContas] = useState<SelectOpt[]>([]);
   const [optsLoading, setOptsLoading] = useState(false);
-  const [novoClienteOpen, setNovoClienteOpen] = useState(false);
+  const [clienteModalOpen, setClienteModalOpen] = useState(false);
   const [novoCliente, setNovoCliente] = useState(emptyCliente);
   const [salvandoCliente, setSalvandoCliente] = useState(false);
 
@@ -134,7 +136,12 @@ export function ContasReceberPage() {
   const cancelForm = () => {
     setFormOpen(false);
     setForm(emptyForm());
-    setNovoClienteOpen(false);
+    setClienteModalOpen(false);
+    setNovoCliente(emptyCliente());
+  };
+
+  const fecharModalCliente = () => {
+    setClienteModalOpen(false);
     setNovoCliente(emptyCliente());
   };
 
@@ -154,6 +161,7 @@ export function ContasReceberPage() {
           tipo_pessoa: novoCliente.tipo_pessoa,
           documento: doc || undefined,
           email: novoCliente.email.trim() || undefined,
+          telefone: novoCliente.telefone.trim() || undefined,
           eh_cliente: true,
         }),
       });
@@ -164,7 +172,7 @@ export function ContasReceberPage() {
       });
       setForm((f) => ({ ...f, pessoa_id: created.id }));
       setNovoCliente(emptyCliente());
-      setNovoClienteOpen(false);
+      fecharModalCliente();
       setSucesso(`Cliente "${created.nome}" salvo em Pessoas e selecionado.`);
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Erro ao cadastrar cliente');
@@ -331,88 +339,35 @@ export function ContasReceberPage() {
                     ))}
                   </select>
                 </label>
-                <div className="space-y-2 sm:col-span-2">
-                  <div className="flex flex-wrap items-end justify-between gap-2">
-                    <label className="block min-w-0 flex-1 space-y-1 text-sm">
-                      <span className="font-medium text-slate-700">Cliente (pessoa)</span>
-                      <select
-                        className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
-                        value={form.pessoa_id}
-                        onChange={(e) => setForm((f) => ({ ...f, pessoa_id: e.target.value }))}
-                      >
-                        <option value="">—</option>
-                        {pessoas.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.nome}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1 shrink-0"
-                      onClick={() => setNovoClienteOpen((o) => !o)}
+                <div className="flex flex-wrap items-end justify-between gap-2 sm:col-span-2">
+                  <label className="block min-w-0 flex-1 space-y-1 text-sm">
+                    <span className="font-medium text-slate-700">Cliente (pessoa)</span>
+                    <select
+                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+                      value={form.pessoa_id}
+                      onChange={(e) => setForm((f) => ({ ...f, pessoa_id: e.target.value }))}
                     >
-                      <UserPlus className="h-3.5 w-3.5" />
-                      {novoClienteOpen ? 'Cancelar cliente' : 'Novo cliente'}
-                    </Button>
-                  </div>
-                  {novoClienteOpen ? (
-                    <div className="rounded-lg border border-dashed border-lexius-200 bg-lexius-50/40 p-3">
-                      <p className="mb-2 text-xs font-medium text-slate-600">
-                        Cadastro rápido (grava em Pessoas como cliente)
-                      </p>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <label className="block space-y-1 text-sm sm:col-span-2">
-                          <span className="font-medium text-slate-700">Nome *</span>
-                          <Input
-                            value={novoCliente.nome}
-                            onChange={(e) => setNovoCliente((c) => ({ ...c, nome: e.target.value }))}
-                          />
-                        </label>
-                        <label className="block space-y-1 text-sm">
-                          <span className="font-medium text-slate-700">Tipo</span>
-                          <select
-                            className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
-                            value={novoCliente.tipo_pessoa}
-                            onChange={(e) =>
-                              setNovoCliente((c) => ({ ...c, tipo_pessoa: e.target.value }))
-                            }
-                          >
-                            <option value="FISICA">Pessoa física</option>
-                            <option value="JURIDICA">Pessoa jurídica</option>
-                          </select>
-                        </label>
-                        <label className="block space-y-1 text-sm">
-                          <span className="font-medium text-slate-700">CPF/CNPJ</span>
-                          <Input
-                            value={novoCliente.documento}
-                            onChange={(e) => setNovoCliente((c) => ({ ...c, documento: e.target.value }))}
-                          />
-                        </label>
-                        <label className="block space-y-1 text-sm sm:col-span-2">
-                          <span className="font-medium text-slate-700">E-mail</span>
-                          <Input
-                            type="email"
-                            value={novoCliente.email}
-                            onChange={(e) => setNovoCliente((c) => ({ ...c, email: e.target.value }))}
-                          />
-                        </label>
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="mt-3 gap-1"
-                        disabled={salvandoCliente}
-                        onClick={() => void salvarNovoCliente()}
-                      >
-                        {salvandoCliente ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                        Salvar cliente
-                      </Button>
-                    </div>
-                  ) : null}
+                      <option value="">—</option>
+                      {pessoas.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-1"
+                    onClick={() => {
+                      setNovoCliente(emptyCliente());
+                      setClienteModalOpen(true);
+                    }}
+                  >
+                    <UserPlus className="h-3.5 w-3.5" />
+                    Novo cliente
+                  </Button>
                 </div>
                 <label className="block space-y-1 text-sm">
                   <span className="font-medium text-slate-700">Centro de custo</span>
@@ -480,6 +435,76 @@ export function ContasReceberPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <Modal
+        open={clienteModalOpen}
+        onClose={fecharModalCliente}
+        title="Novo cliente"
+        description="O cadastro é salvo em Pessoas e vinculado a este título."
+        footer={
+          <>
+            <Button type="button" variant="outline" onClick={fecharModalCliente}>
+              Cancelar
+            </Button>
+            <Button type="button" disabled={salvandoCliente} onClick={() => void salvarNovoCliente()}>
+              {salvandoCliente ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Salvar cliente
+            </Button>
+          </>
+        }
+      >
+        <form
+          className="grid gap-3 sm:grid-cols-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void salvarNovoCliente();
+          }}
+        >
+          <label className="block space-y-1 text-sm sm:col-span-2">
+            <span className="font-medium text-slate-700">Nome *</span>
+            <Input
+              autoFocus
+              value={novoCliente.nome}
+              onChange={(e) => setNovoCliente((c) => ({ ...c, nome: e.target.value }))}
+            />
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Tipo</span>
+            <select
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+              value={novoCliente.tipo_pessoa}
+              onChange={(e) => setNovoCliente((c) => ({ ...c, tipo_pessoa: e.target.value }))}
+            >
+              <option value="FISICA">Pessoa física</option>
+              <option value="JURIDICA">Pessoa jurídica</option>
+            </select>
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="font-medium text-slate-700">CPF/CNPJ</span>
+            <Input
+              value={novoCliente.documento}
+              onChange={(e) => setNovoCliente((c) => ({ ...c, documento: e.target.value }))}
+            />
+          </label>
+          <label className="block space-y-1 text-sm sm:col-span-2">
+            <span className="font-medium text-slate-700">Telefone</span>
+            <Input
+              type="tel"
+              placeholder="(92) 99999-9999"
+              value={novoCliente.telefone}
+              onChange={(e) => setNovoCliente((c) => ({ ...c, telefone: e.target.value }))}
+            />
+          </label>
+          <label className="block space-y-1 text-sm sm:col-span-2">
+            <span className="font-medium text-slate-700">E-mail</span>
+            <Input
+              type="email"
+              value={novoCliente.email}
+              onChange={(e) => setNovoCliente((c) => ({ ...c, email: e.target.value }))}
+            />
+          </label>
+        </form>
+      </Modal>
 
       <Card className="overflow-hidden shadow-sm">
         <CardContent className="p-0">
