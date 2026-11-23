@@ -9,7 +9,7 @@ export class PessoaDadosBancarios {
   @Column({ name: 'pessoa_id', type: 'uuid' })
   pessoaId!: string;
 
-  @Column({ name: 'banco_codigo', type: 'varchar', length: 3, nullable: true })
+  @Column({ name: 'banco_codigo', type: 'varchar', length: 8, nullable: true })
   bancoCodigo!: string | null;
 
   @Column({ type: 'text', nullable: true })

@@ -13,7 +13,7 @@ export class ContaBancaria {
   @Column({ type: 'text' })
   apelido!: string;
 
-  @Column({ name: 'banco_codigo', type: 'varchar', length: 3 })
+  @Column({ name: 'banco_codigo', type: 'varchar', length: 8 })
   bancoCodigo!: string;
 
   @Column({ type: 'text', nullable: true })

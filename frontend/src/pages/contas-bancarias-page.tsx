@@ -163,8 +163,8 @@ export function BancosPage() {
       setErro('Informe o apelido da conta.');
       return;
     }
-    if (nova.banco_codigo.length !== 3) {
-      setErro('Código do banco deve ter 3 dígitos.');
+    if (nova.banco_codigo.length < 1 || nova.banco_codigo.length > 8) {
+      setErro('Código do banco: de 1 a 8 dígitos (COMPE ou ISPB).');
       return;
     }
     if (nova.provedor === 'INTER') {
@@ -321,10 +321,11 @@ export function BancosPage() {
       <label className="block space-y-1 text-sm">
         <span className="font-medium text-slate-700">Código banco *</span>
         <Input
-          maxLength={3}
+          maxLength={8}
+          inputMode="numeric"
           value={nova.banco_codigo}
           disabled={nova.provedor === 'INTER'}
-          onChange={(e) => setNova((n) => ({ ...n, banco_codigo: e.target.value.replace(/\D/g, '').slice(0, 3) }))}
+          onChange={(e) => setNova((n) => ({ ...n, banco_codigo: e.target.value.replace(/\D/g, '').slice(0, 8) }))}
         />
       </label>
       <label className="block space-y-1 text-sm">
