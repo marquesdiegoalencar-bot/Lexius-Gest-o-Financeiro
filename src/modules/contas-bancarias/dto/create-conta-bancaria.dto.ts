@@ -12,6 +12,7 @@ import { ProvedorBancario, TipoContaBancaria } from '../../../database/enums';
 
 export class CreateContaBancariaDto {
   @IsString()
+  @Length(1, 120)
   apelido!: string;
 
   @IsString()

@@ -57,18 +57,20 @@ const TIPOS_CHAVE_PIX = [
 
 const emptyNova = () => ({
   apelido: '',
-  banco_codigo: '077',
+  banco_codigo: '',
   agencia: '',
   conta: '',
   tipo: 'CORRENTE',
-  provedor: 'INTER',
+  provedor: 'MANUAL',
   credencial_ref: '',
   chave_pix: '',
   tipo_chave_pix: '',
-  sincroniza_extrato: true,
+  sincroniza_extrato: false,
   saldo_inicial: '0',
   data_saldo_inicial: new Date().toISOString().slice(0, 10),
 });
+
+const PROVEDORES_COM_API = new Set(['INTER', 'ASAAS', 'C6']);
 
 const emptyEdit = () => ({
   apelido: '',
@@ -167,15 +169,17 @@ export function BancosPage() {
       setErro('Código do banco: de 1 a 8 dígitos (COMPE ou ISPB).');
       return;
     }
-    if (nova.provedor === 'INTER') {
-      if (nova.banco_codigo !== '077') {
-        setErro('Conta Inter exige banco 077.');
-        return;
-      }
-      if (!nova.credencial_ref.trim()) {
-        setErro('Informe a referência de credencial para conexão API (credencial_ref).');
-        return;
-      }
+    if (nova.provedor === 'INTER' && nova.banco_codigo !== '077') {
+      setErro('Conta Inter exige banco 077.');
+      return;
+    }
+    if (
+      PROVEDORES_COM_API.has(nova.provedor) &&
+      nova.sincroniza_extrato &&
+      !nova.credencial_ref.trim()
+    ) {
+      setErro('Informe credencial_ref para conectar e sincronizar via API.');
+      return;
     }
     setSaving(true);
     setErro(null);
@@ -286,6 +290,7 @@ export function BancosPage() {
 
   const novaFormBody = (
     <form
+      id="form-nova-conta-bancaria"
       className="grid gap-3 sm:grid-cols-2"
       onSubmit={(e) => {
         e.preventDefault();
@@ -303,12 +308,14 @@ export function BancosPage() {
           value={nova.provedor}
           onChange={(e) => {
             const provedor = e.target.value;
-            setNova((n) => ({
-              ...n,
-              provedor,
-              banco_codigo: provedor === 'INTER' ? '077' : n.banco_codigo,
-              sincroniza_extrato: provedor !== 'MANUAL',
-            }));
+            setNova((n) => {
+              let banco_codigo = n.banco_codigo;
+              if (provedor === 'INTER') banco_codigo = '077';
+              else if (banco_codigo === '077') banco_codigo = '';
+              const sincroniza_extrato =
+                provedor === 'MANUAL' ? false : provedor !== 'OUTRO' ? true : n.sincroniza_extrato;
+              return { ...n, provedor, banco_codigo, sincroniza_extrato };
+            });
           }}
         >
           {PROVEDORES.map((p) => (
@@ -456,7 +463,7 @@ export function BancosPage() {
             <Button type="button" variant="outline" onClick={fecharNova}>
               Cancelar
             </Button>
-            <Button type="button" disabled={saving} onClick={() => void salvarNova()}>
+            <Button type="submit" form="form-nova-conta-bancaria" disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Cadastrar
             </Button>
