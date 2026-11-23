@@ -1,5 +1,12 @@
 # Produção na VPS usando Postgres existente (Lexius Cobrança no Coolify).
-# Variável obrigatória: DATABASE_URL (host = nome/ID do container na rede Coolify).
+# Variáveis: DATABASE_URL (host = container Postgres na rede Coolify; senha URL-encoded)
+# Opcional: COOLIFY_DB_NETWORK = nome da rede Docker do Postgres (ex.: coolify ou t139wmk...)
+networks:
+  default:
+  coolify-db:
+    external: true
+    name: ${COOLIFY_DB_NETWORK:-coolify}
+
 services:
   api:
     build:
@@ -21,6 +28,9 @@ services:
       STORAGE_LOCAL_PATH: /app/storage
     volumes:
       - app_storage:/app/storage
+    networks:
+      - default
+      - coolify-db
 
   web:
     build:

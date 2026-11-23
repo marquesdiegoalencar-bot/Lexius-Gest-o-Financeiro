@@ -33,6 +33,10 @@ O banco **`lexius_financeiro`** foi criado no mesmo Postgres do **Lexius Cobran�
 - Compose sem container Postgres: use  
   `docker-compose.production.yml` + `docker-compose.production.shared-pg.yml`
 
+**Senha com `/` ou `@`:** use URL-encoding na `DATABASE_URL` (`/` → `%2F`, `@` → `%40`).
+
+**Rede Docker:** serviço `api` precisa estar na mesma rede do Postgres. Defina `COOLIFY_DB_NETWORK` com o nome da rede do container Postgres (Coolify → Postgres → Network, ou `docker network ls`).
+
 Recriar manualmente (terminal do Postgres na VPS):
 
 ```bash

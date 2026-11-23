@@ -27,7 +27,14 @@ O repositório está **público** na `main` (PR #13 mergeado). Se ainda aparece 
 
 ## Domínio
 
-Serviço **web** (porta 80 do container): `46-202-93-186.sslip.io`
+Serviço **web** (porta 80 do container): `46-202-93-186.sslip.io`  
+Ou temporário: `http://46.202.93.186:8081` (deploy manual em `/tmp`)
+
+## Rede + DATABASE_URL
+
+1. `DATABASE_URL` com host = **nome do container Postgres** (não IP) e senha **URL-encoded**
+2. Env `COOLIFY_DB_NETWORK` = rede externa do Postgres (ver `docker network ls` no VPS)
+3. Se API reiniciar: `docker network connect <rede-postgres> lexius-gest-o-financeiro-api-1`
 
 ## SSH (se voltar a usar deploy key)
 
