@@ -1,12 +1,23 @@
-import { IsBoolean, IsDateString, IsEnum, IsNumber, IsOptional, IsString, Length } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+} from 'class-validator';
 import { ProvedorBancario, TipoContaBancaria } from '../../../database/enums';
 
 export class CreateContaBancariaDto {
   @IsString()
+  @Length(1, 120)
   apelido!: string;
 
   @IsString()
-  @Length(3, 3)
+  @Length(1, 8)
+  @Matches(/^\d+$/, { message: 'banco_codigo deve conter apenas dígitos' })
   banco_codigo!: string;
 
   @IsOptional()

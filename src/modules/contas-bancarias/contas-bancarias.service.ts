@@ -43,34 +43,48 @@ export class ContasBancariasService {
   async create(empresaId: string, dto: CreateContaBancariaDto) {
     const provedor = dto.provedor ?? ProvedorBancario.MANUAL;
 
-    if (provedor === ProvedorBancario.INTER) {
-      if (dto.banco_codigo !== '077') {
-        throw new BadRequestException('Conta Inter deve usar banco_codigo 077');
-      }
-      if (!dto.credencial_ref?.trim()) {
-        throw new BadRequestException('credencial_ref é obrigatório para conta Inter');
-      }
-    } else if (dto.banco_codigo === '077' && provedor === ProvedorBancario.MANUAL) {
-      throw new BadRequestException('Banco 077 exige provedor INTER');
+    if (provedor === ProvedorBancario.INTER && dto.banco_codigo !== '077') {
+      throw new BadRequestException('Conta Inter deve usar banco_codigo 077');
     }
 
-    return this.repo.save(
-      this.repo.create({
-        empresaId,
-        apelido: dto.apelido,
-        bancoCodigo: dto.banco_codigo,
-        agencia: dto.agencia ?? null,
-        conta: dto.conta ?? null,
-        tipo: dto.tipo ?? TipoContaBancaria.CORRENTE,
-        provedor,
-        saldoInicial: String(dto.saldo_inicial ?? 0),
-        dataSaldoInicial: dto.data_saldo_inicial ?? new Date().toISOString().slice(0, 10),
-        sincronizaExtrato: dto.sincroniza_extrato ?? provedor === ProvedorBancario.INTER,
-        credencialRef: dto.credencial_ref?.trim() ?? null,
-        chavePix: dto.chave_pix?.trim() ?? null,
-        tipoChavePix: dto.tipo_chave_pix?.trim() ?? null,
-      }),
-    );
+    const credencialRef = dto.credencial_ref?.trim() ?? null;
+    const sincronizaExtrato = dto.sincroniza_extrato ?? provedor === ProvedorBancario.INTER;
+    if (
+      [ProvedorBancario.INTER, ProvedorBancario.ASAAS, ProvedorBancario.C6].includes(provedor) &&
+      sincronizaExtrato &&
+      !credencialRef
+    ) {
+      throw new BadRequestException(
+        'credencial_ref é obrigatório quando o provedor usa API com sincronização',
+      );
+    }
+
+    try {
+      return await this.repo.save(
+        this.repo.create({
+          empresaId,
+          apelido: dto.apelido.trim(),
+          bancoCodigo: dto.banco_codigo.trim(),
+          agencia: dto.agencia?.trim() || null,
+          conta: dto.conta?.trim() || null,
+          tipo: dto.tipo ?? TipoContaBancaria.CORRENTE,
+          provedor,
+          saldoInicial: String(dto.saldo_inicial ?? 0),
+          dataSaldoInicial: dto.data_saldo_inicial ?? new Date().toISOString().slice(0, 10),
+          sincronizaExtrato,
+          credencialRef,
+          chavePix: dto.chave_pix?.trim() || null,
+          tipoChavePix: dto.tipo_chave_pix?.trim() || null,
+        }),
+      );
+    } catch (e) {
+      if (e instanceof QueryFailedError && String(e.message).includes('23505')) {
+        throw new ConflictException(
+          'Já existe conta com este banco, agência e número para a empresa.',
+        );
+      }
+      throw e;
+    }
   }
 
   async update(id: string, empresaId: string, dto: UpdateContaBancariaDto) {
@@ -81,8 +95,14 @@ export class ContasBancariasService {
     if (dto.tipo_chave_pix !== undefined) conta.tipoChavePix = dto.tipo_chave_pix?.trim() ?? null;
     if (dto.credencial_ref !== undefined) conta.credencialRef = dto.credencial_ref?.trim() ?? null;
     if (dto.sincroniza_extrato !== undefined) conta.sincronizaExtrato = dto.sincroniza_extrato;
-    if (conta.provedor === ProvedorBancario.INTER && !conta.credencialRef?.trim()) {
-      throw new BadRequestException('credencial_ref é obrigatório para conta Inter');
+    if (
+      conta.sincronizaExtrato &&
+      [ProvedorBancario.INTER, ProvedorBancario.ASAAS, ProvedorBancario.C6].includes(conta.provedor) &&
+      !conta.credencialRef?.trim()
+    ) {
+      throw new BadRequestException(
+        'credencial_ref é obrigatório para sincronização/API neste provedor',
+      );
     }
     return this.repo.save(conta);
   }

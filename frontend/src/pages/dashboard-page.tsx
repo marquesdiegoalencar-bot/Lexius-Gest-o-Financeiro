@@ -8,8 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowDownCircle, ArrowUpCircle, Banknote, Landmark, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertCircle, Banknote, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
 import { LexiusMascot } from '@/components/brand/lexius-mascot';
 import { Button } from '@/components/ui/button';
 import { useApi } from '@/hooks/use-api';
@@ -178,24 +177,6 @@ export function DashboardPage() {
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             Atualizar
-          </Button>
-          <Button type="button" size="sm" className="gap-2" asChild>
-            <Link to="/contas-a-receber?novo=1">
-              <ArrowDownCircle className="h-4 w-4" />
-              Novo a receber
-            </Link>
-          </Button>
-          <Button type="button" size="sm" variant="secondary" className="gap-2" asChild>
-            <Link to="/contas-a-pagar?novo=1">
-              <ArrowUpCircle className="h-4 w-4" />
-              Novo a pagar
-            </Link>
-          </Button>
-          <Button type="button" size="sm" variant="outline" className="gap-2" asChild>
-            <Link to="/bancos">
-              <Landmark className="h-4 w-4" />
-              Bancos
-            </Link>
           </Button>
         </div>
       </div>

@@ -102,7 +102,7 @@ CREATE INDEX idx_pessoas_nome_trgm ON pessoas USING gin (nome gin_trgm_ops);
 CREATE TABLE pessoa_dados_bancarios (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     pessoa_id     UUID NOT NULL REFERENCES pessoas(id),
-    banco_codigo  VARCHAR(3),
+    banco_codigo  VARCHAR(8),
     agencia       TEXT,
     conta         TEXT,
     tipo_conta    tipo_conta_bancaria,
@@ -140,7 +140,7 @@ CREATE TABLE contas_bancarias (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     empresa_id    UUID NOT NULL REFERENCES empresas(id),
     apelido       TEXT NOT NULL,
-    banco_codigo  VARCHAR(3) NOT NULL,        -- 077 = Inter
+    banco_codigo  VARCHAR(8) NOT NULL,        -- COMPE (ex. 077) ou ISPB (8 dígitos)
     agencia       TEXT,
     conta         TEXT,
     tipo          tipo_conta_bancaria NOT NULL DEFAULT 'CORRENTE',
