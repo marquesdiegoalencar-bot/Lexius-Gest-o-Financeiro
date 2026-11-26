@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fornatto-postgres
+    restart: unless-stopped
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_USER: fornatto
+      POSTGRES_PASSWORD: fornatto_dev
+      POSTGRES_DB: fornatto
+    volumes:
+      - fornatto_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fornatto -d fornatto']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  fornatto_pg_data:

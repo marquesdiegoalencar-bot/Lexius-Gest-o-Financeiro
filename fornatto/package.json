@@ -1,0 +1,32 @@
+{
+  "name": "fornatto",
+  "private": true,
+  "version": "0.1.0",
+  "description": "FORNATTO — SaaS para padarias (monorepo)",
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter ./apps/* run dev",
+    "build": "pnpm -r --filter ./apps/* run build",
+    "lint": "pnpm -r run lint",
+    "test": "pnpm -r run test",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@10.33.4",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "bcrypt",
+      "prisma",
+      "sharp"
+    ]
+  }
+}
