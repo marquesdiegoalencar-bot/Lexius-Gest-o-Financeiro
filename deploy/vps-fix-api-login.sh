@@ -1,14 +1,20 @@
 #!/bin/sh
-# Corrige login (502 Bad Gateway): API + Postgres na mesma rede Docker.
-# Execute como root no VPS (SSH), não só no terminal web do Coolify.
+# Corrige login (502 Bad Gateway). Rodar como root no VPS (SSH).
 set -e
-API=lexius-gest-o-financeiro-api-1
-PG_NET=$(docker inspect "$(docker ps -q -f name=postgres-t139)" --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}' 2>/dev/null | head -1)
-if [ -z "$PG_NET" ]; then
-  echo "Não achei container Postgres. Liste: docker ps | grep -i postgres"
+cd /tmp/Lexius-Gest-o-Financeiro
+git pull origin main
+PG_NAME=$(docker ps --format '{{.Names}}' | grep '^postgres-t139' | head -1)
+PG_NET=t139wmkoppbj1hocvgslabxx
+echo "Postgres: $PG_NAME | rede: $PG_NET"
+if [ -z "$DATABASE_URL" ]; then
+  echo "Defina DATABASE_URL antes (senha URL-encoded, host=$PG_NAME:5432)"
   exit 1
 fi
-echo "Rede Postgres: $PG_NET"
-docker network connect "$PG_NET" "$API" 2>/dev/null || echo "Já conectado ou erro (verifique)"
-echo "Defina DATABASE_URL no Coolify com host = nome do container Postgres, porta 5432, senha URL-encoded."
-echo "Recrie API: cd /tmp/Lexius-Gest-o-Financeiro && docker compose -f docker-compose.production.shared-pg.yml up -d api"
+export JWT_SECRET="${JWT_SECRET:-LexiusProdJwtSecretMin32CharsVps2026!}"
+export COOLIFY_DB_NETWORK="$PG_NET"
+export RUN_DB_MIGRATE="${RUN_DB_MIGRATE:-true}"
+export RUN_DB_SEED="${RUN_DB_SEED:-true}"
+docker compose -f docker-compose.production.shared-pg.yml -f deploy/docker-compose.vps-coolify.yml up -d --build
+sleep 8
+curl -s -o /dev/null -w "login HTTP %{http_code}\n" -X POST http://127.0.0.1:8081/v1/auth/login \
+  -H 'Content-Type: application/json' -d '{"email":"master@lexius.local","senha":"Lexius@123"}'
