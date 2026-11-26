@@ -6,4 +6,9 @@ dist
 *.log
 .turbo
 coverage
+*.tsbuildinfo
+packages/shared/dist
+packages/shared/src/**/*.js
+packages/shared/src/**/*.d.ts
+packages/shared/src/**/*.js.map
 apps/api/prisma/*.db
