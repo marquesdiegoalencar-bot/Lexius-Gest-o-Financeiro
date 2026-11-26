@@ -15,7 +15,7 @@ RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY schema.sql ./
 COPY migrations ./migrations/
-COPY scripts/migrate.js scripts/seed-dev.js ./scripts/
+COPY scripts/migrate.js scripts/seed-dev.js scripts/create-usuario.js scripts/delete-contas-teste.js ./scripts/
 COPY scripts/docker-api-entrypoint.sh ./scripts/docker-api-entrypoint.sh
 RUN chmod +x ./scripts/docker-api-entrypoint.sh
 EXPOSE 3000
