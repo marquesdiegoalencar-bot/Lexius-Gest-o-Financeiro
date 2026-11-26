@@ -27,7 +27,13 @@ export function LoginPage() {
       await login(email, senha);
       navigate('/', { replace: true });
     } catch (err) {
-      setErro(err instanceof ApiError ? err.message : 'Falha no login');
+      setErro(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Falha no login',
+      );
     } finally {
       setLoading(false);
     }

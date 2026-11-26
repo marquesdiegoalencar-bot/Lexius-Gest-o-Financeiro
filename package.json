@@ -16,6 +16,7 @@
     "db:seed:dev": "node scripts/seed-dev.js",
     "db:clean-work": "node scripts/clean-work-data.js",
     "db:clean-slate": "node scripts/clean-work-data.js --slate",
+    "db:create-usuario": "node scripts/create-usuario.js",
     "frontend:dev": "npm --prefix frontend run dev",
     "frontend:build": "npm --prefix frontend run build",
     "frontend:preview": "npm --prefix frontend run preview"

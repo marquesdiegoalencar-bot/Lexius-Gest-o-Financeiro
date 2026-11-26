@@ -14,7 +14,10 @@ export JWT_SECRET="${JWT_SECRET:-LexiusProdJwtSecretMin32CharsVps2026!}"
 export COOLIFY_DB_NETWORK="$PG_NET"
 export RUN_DB_MIGRATE="${RUN_DB_MIGRATE:-true}"
 export RUN_DB_SEED="${RUN_DB_SEED:-true}"
+export SEED_FORCE_PASSWORD="${SEED_FORCE_PASSWORD:-true}"
+export COOLIFY_PORT="${COOLIFY_PORT:-8081}"
 docker compose -f docker-compose.production.shared-pg.yml -f deploy/docker-compose.vps-coolify.yml up -d --build
+docker compose -f docker-compose.production.shared-pg.yml -f deploy/docker-compose.vps-coolify.yml exec -T api node scripts/seed-dev.js 2>/dev/null || true
 sleep 8
 curl -s -o /dev/null -w "login HTTP %{http_code}\n" -X POST http://127.0.0.1:8081/v1/auth/login \
   -H 'Content-Type: application/json' -d '{"email":"master@lexius.local","senha":"Lexius@123"}'

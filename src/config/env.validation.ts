@@ -32,13 +32,13 @@ class EnvironmentVariables {
   @IsString()
   JWT_EXPIRES_IN?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  COB_INTEGRACAO_API_KEY!: string;
+  COB_INTEGRACAO_API_KEY?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  COB_INTEGRACAO_HMAC_SECRET!: string;
+  COB_INTEGRACAO_HMAC_SECRET?: string;
 
   @IsOptional()
   @IsString()

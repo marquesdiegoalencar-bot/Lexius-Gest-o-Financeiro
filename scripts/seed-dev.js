@@ -7,6 +7,7 @@ const { Client } = require('pg');
 
 async function upsertUsuario(client, nome, email, senha) {
   const hash = await bcrypt.hash(senha, 12);
+  const force = process.env.SEED_FORCE_PASSWORD === 'true';
   let usuario = await client.query('SELECT id FROM usuarios WHERE email = $1', [email]);
   if (!usuario.rows.length) {
     usuario = await client.query(
@@ -14,6 +15,9 @@ async function upsertUsuario(client, nome, email, senha) {
       [nome, email, hash],
     );
     console.log('Usuário criado:', email);
+  } else if (force) {
+    await client.query('UPDATE usuarios SET senha_hash = $1, ativo = true WHERE email = $2', [hash, email]);
+    console.log('Senha atualizada (SEED_FORCE_PASSWORD):', email);
   }
   return usuario.rows[0].id;
 }
